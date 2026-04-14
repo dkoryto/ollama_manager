@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -22,6 +23,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSettings } from "@/lib/settings-context";
 import { benchmarks } from "@/lib/benchmarks";
+import { generateId } from "@/lib/generate-id";
 import {
   Play,
   Save,
@@ -36,6 +38,9 @@ import {
   FlaskConical,
   History,
   Activity,
+  Loader2,
+  CheckCircle2,
+  ListChecks,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -190,6 +195,8 @@ export default function TestsPage() {
     const s = getRunningState();
     return s?.note || "";
   });
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [modelLoading, setModelLoading] = useState(false);
 
   const progressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const firstTokenTimeRef = useRef<number | null>(null);
@@ -284,7 +291,6 @@ export default function TestsPage() {
       const elapsed = getTimestamp() - startTimeRef.current;
       setRunningTime(Math.round(elapsed));
       if (!firstTokenTimeRef.current) {
-        // init phase: slow growth to 40% over ~20s, then creep to 55%
         const p = Math.min((elapsed / 20000) * 40, 40) + Math.min(((elapsed - 20000) / 30000) * 15, 15);
         setRunningProgress(Math.min(p, 55));
       } else {
@@ -293,6 +299,41 @@ export default function TestsPage() {
         setRunningProgress(Math.min(p, 95));
       }
     }, 500);
+  }
+
+  async function loadModel() {
+    if (!selectedModel) {
+      toast.error("Wybierz model");
+      return;
+    }
+    setModelLoading(true);
+    try {
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: selectedModel,
+          prompt: "Say hello",
+          stream: false,
+          keep_alive: "5m",
+        }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        toast.error("Błąd ładowania modelu: " + text);
+      } else {
+        toast.success(`Model ${selectedModel} załadowany do pamięci`);
+        // refresh loaded models
+        const psRes = await fetch("/api/ps");
+        const psData = await psRes.json();
+        setLoadedModels((psData.models || []).map((m: { name: string }) => m.name));
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Błąd";
+      toast.error("Błąd ładowania modelu: " + msg);
+    } finally {
+      setModelLoading(false);
+    }
   }
 
   async function runBenchmark(benchmark: (typeof benchmarks)[0]) {
@@ -382,9 +423,25 @@ export default function TestsPage() {
     }
   }
 
+  async function runSelected() {
+    if (selectedIds.length === 0) {
+      toast.error("Zaznacz przynajmniej jeden test");
+      return;
+    }
+    const toRun = benchmarks.filter((b) => selectedIds.includes(b.id));
+    for (const b of toRun) {
+      await runBenchmark(b);
+      // wait until user saves or closes before next if not auto-saving
+      // since runBenchmark doesn't block on save, we just run sequentially
+      // but we need to wait for runningId to clear (save or cancel)
+      if (runningStatus === RUNNING_ERROR) break;
+    }
+    setSelectedIds([]);
+  }
+
   function submitResult(benchmark: (typeof benchmarks)[0]) {
     const result: TestResult = {
-      id: crypto.randomUUID(),
+      id: generateId(),
       model: selectedModel,
       benchmarkId: benchmark.id,
       benchmarkName: benchmark.name,
@@ -428,7 +485,9 @@ export default function TestsPage() {
     const a = document.createElement("a");
     a.href = url;
     a.download = `ollama-test-results-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
     toast.success("Wyniki wyeksportowane");
   }
@@ -450,8 +509,24 @@ export default function TestsPage() {
     if (runningStatus === RUNNING_INIT) return "Inicjalizowanie modelu...";
     if (runningStatus === RUNNING_GENERATE) return "Generowanie odpowiedzi...";
     if (runningStatus === RUNNING_ERROR) return "Wystąpił błąd";
-    return "Przetwarzanie...";
+    return "Gotowe — zapisz wynik";
   }, [runningId, runningStatus]);
+
+  const isModelLoaded = selectedModel && loadedModels.includes(selectedModel);
+
+  function toggleBenchmark(id: string) {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  }
+
+  function selectAll() {
+    setSelectedIds(benchmarks.map((b) => b.id));
+  }
+
+  function deselectAll() {
+    setSelectedIds([]);
+  }
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
@@ -464,7 +539,7 @@ export default function TestsPage() {
             Porównuj modele za pomocą presetowych zadań i zapisuj wyniki
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {modelsLoading ? (
             <Skeleton className="h-9 w-[200px]" />
           ) : (
@@ -490,11 +565,44 @@ export default function TestsPage() {
               </SelectContent>
             </Select>
           )}
-          <Button variant="outline" onClick={exportResults}>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!selectedModel || modelLoading}
+            onClick={loadModel}
+          >
+            {modelLoading ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : isModelLoaded ? (
+              <CheckCircle2 className="mr-2 h-4 w-4 text-green-600" />
+            ) : (
+              <Activity className="mr-2 h-4 w-4" />
+            )}
+            {modelLoading ? "Ładowanie..." : isModelLoaded ? "Załadowany" : "Załaduj model"}
+          </Button>
+          <Button variant="outline" size="sm" onClick={exportResults}>
             <Download className="mr-2 h-4 w-4" />
             Eksport
           </Button>
         </div>
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <Button
+          size="sm"
+          variant="default"
+          disabled={selectedIds.length === 0 || !selectedModel || runningId !== null}
+          onClick={runSelected}
+        >
+          <ListChecks className="mr-2 h-4 w-4" />
+          Uruchom zaznaczone ({selectedIds.length})
+        </Button>
+        <Button size="sm" variant="ghost" onClick={selectAll}>
+          Zaznacz wszystkie
+        </Button>
+        <Button size="sm" variant="ghost" onClick={deselectAll}>
+          Odznacz wszystkie
+        </Button>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -514,7 +622,14 @@ export default function TestsPage() {
                     }`}
                   >
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-semibold text-[#242424]">{b.name}</CardTitle>
+                      <div className="flex items-start justify-between gap-2">
+                        <CardTitle className="text-sm font-semibold text-[#242424]">{b.name}</CardTitle>
+                        <Checkbox
+                          checked={selectedIds.includes(b.id)}
+                          onCheckedChange={() => toggleBenchmark(b.id)}
+                          aria-label={`Zaznacz ${b.name}`}
+                        />
+                      </div>
                     </CardHeader>
                     <CardContent>
                       <p className="mb-3 line-clamp-3 text-xs text-[#898989]">

@@ -29,10 +29,12 @@ export function saveChatSessions(sessions: ChatSession[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
 }
 
+import { generateId } from "./generate-id";
+
 export function createChatSession(model: string): ChatSession {
   const now = new Date().toISOString();
   return {
-    id: crypto.randomUUID(),
+    id: generateId(),
     title: "Nowy chat",
     model,
     messages: [],

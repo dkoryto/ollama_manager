@@ -52,6 +52,7 @@ import {
   ServerOff,
   Plus,
 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 
 type Model = {
@@ -138,6 +139,7 @@ export default function Home() {
   const [pullName, setPullName] = useState("");
   const [pulling, setPulling] = useState(false);
   const [pullLog, setPullLog] = useState("");
+  const [pullProgress, setPullProgress] = useState(0);
 
   async function handleDelete(name: string) {
     if (!confirm(`Czy na pewno chcesz usunąć model "${name}"?`)) return;
@@ -159,6 +161,7 @@ export default function Home() {
     if (!pullName.trim()) return;
     setPulling(true);
     setPullLog("");
+    setPullProgress(0);
     try {
       const res = await fetch("/api/pull", {
         method: "POST",
@@ -180,12 +183,16 @@ export default function Home() {
               const obj = JSON.parse(line);
               const msg = obj.status || obj.error || JSON.stringify(obj);
               setPullLog((prev) => prev + msg + "\n");
+              if (typeof obj.completed === "number" && typeof obj.total === "number" && obj.total > 0) {
+                setPullProgress(Math.round((obj.completed / obj.total) * 100));
+              }
             } catch {
               setPullLog((prev) => prev + line + "\n");
             }
           }
         }
       }
+      setPullProgress(100);
       toast.success("Pobieranie zakończone");
       await refresh();
     } catch (e: unknown) {
@@ -529,7 +536,7 @@ export default function Home() {
           <DialogHeader>
             <DialogTitle>Pobierz model z Ollama</DialogTitle>
             <DialogDescription>
-              Wpisz nazwę modelu (np. llama3.2, qwen2.5, gemma2).
+              Wpisz nazwę modelu lub wybierz z listy popularnych.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">
@@ -543,6 +550,27 @@ export default function Home() {
                 disabled={pulling}
               />
             </div>
+            <div className="flex flex-wrap gap-2">
+              {["llama3.2", "qwen2.5", "gemma2", "mistral", "phi4", "deepseek-r1:1.5b"].map((m) => (
+                <Badge
+                  key={m}
+                  variant="outline"
+                  className="cursor-pointer hover:bg-[#f5f5f5]"
+                  onClick={() => setPullName(m)}
+                >
+                  {m}
+                </Badge>
+              ))}
+            </div>
+            {pulling && (
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs text-[#898989]">
+                  <span>Postęp pobierania</span>
+                  <span>{pullProgress}%</span>
+                </div>
+                <Progress value={pullProgress} />
+              </div>
+            )}
             <ScrollArea className="h-40 rounded-[8px] border border-[rgba(34,42,53,0.08)] bg-black p-3 text-xs text-green-400">
               <pre className="whitespace-pre-wrap">
                 {pullLog || "Oczekiwanie na start..."}
