@@ -2,17 +2,34 @@
 
 ## Current State
 
-The project directory (`/Users/dkoryto/_projekty/ceo_ai`) is currently **empty**. There are no source files, configuration files, or existing code assets present.
+The project directory (`/Users/dkoryto/_projekty/ollama_manager`) contains a **Next.js 16** application (App Router) for managing local Ollama LLM models.
 
-## What This Means
+## Technology Stack
 
-- **No technology stack identified**: No `pyproject.toml`, `package.json`, `Cargo.toml`, `go.mod`, `pom.xml`, `build.gradle`, `Makefile`, `requirements.txt`, or similar files were found.
-- **No build process**: There are no build scripts, CI/CD configurations, or container definitions.
-- **No code organization**: No modules, packages, or directories exist.
-- **No development conventions**: No linting configs, formatting rules, or contribution guidelines are present.
-- **No tests**: No test suites, test configuration, or testing frameworks are configured.
-- **No deployment process**: No infrastructure-as-code, deployment manifests, or release pipelines exist.
+- **Framework:** Next.js 16.2.3 (Turbopack, App Router)
+- **Language:** TypeScript (strict mode)
+- **Styling:** Tailwind CSS v4
+- **UI Components:** shadcn/ui + Base UI (Radix)
+- **State:** React Context + localStorage
+- **Runtime:** Node.js 20 (Alpine in Docker)
+- **Output:** `standalone` (optimized for Docker)
 
-## Next Steps for an Agent
+## Build & Run
 
-Before making any changes, confirm with the user (or their instructions) what kind of project should be created or initialized here. Do not assume a language, framework, or architecture.
+```bash
+npm install
+npm run build
+npm run lint
+```
+
+Docker:
+```bash
+docker compose build --no-cache
+docker compose up -d
+```
+
+## Important Notes
+
+- The working directory was renamed from `ceo_ai` to `ollama_manager`.
+- Always run Docker commands from `/Users/dkoryto/_projekty/ollama_manager`.
+- After renaming, rebuild the Docker image to ensure everything works correctly.

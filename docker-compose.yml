@@ -1,0 +1,13 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      # Adres API Ollama. Na macOS/Windows Docker domyślnie rozwiązuje host.docker.internal.
+      # Na Linuxie może być konieczne ustawienie np. http://172.17.0.1:11434 lub włączenie host network.
+      - OLLAMA_HOST=http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
