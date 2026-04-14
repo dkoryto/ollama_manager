@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useSettings } from "@/lib/settings-context";
+import { useI18n } from "@/lib/i18n-context";
 import {
   Activity,
   AlertCircle,
@@ -60,6 +61,7 @@ function formatBytes(bytes: number) {
 }
 
 export default function SystemPage() {
+  const { t } = useI18n();
   const settings = useSettings();
   const [version, setVersion] = useState<OllamaVersion | null>(null);
   const [versionError, setVersionError] = useState<string>("");
@@ -68,7 +70,7 @@ export default function SystemPage() {
   const [loading, setLoading] = useState(true);
   const [autoRefresh, setAutoRefresh] = useState(true);
 
-  async function fetchData() {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     setVersionError("");
     try {
@@ -83,11 +85,11 @@ export default function SystemPage() {
         if (vRes.value.ok) {
           setVersion(vData);
         } else {
-          setVersionError(vData.error || "Nieznany błąd");
+          setVersionError(vData.error || "Unknown error");
           setVersion(null);
         }
       } else {
-        setVersionError(vRes.reason?.message || "Brak połączenia");
+        setVersionError(vRes.reason?.message || t.system.inactive);
         setVersion(null);
       }
 
@@ -105,21 +107,21 @@ export default function SystemPage() {
         setInstalled([]);
       }
     } catch {
-      toast.error("Błąd pobierania danych systemowych");
+      toast.error("Error fetching system data");
     } finally {
       setLoading(false);
     }
-  }
+  }, [t.system.inactive]);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
 
   useEffect(() => {
     if (!autoRefresh) return;
     const id = setInterval(fetchData, 10000);
     return () => clearInterval(id);
-  }, [autoRefresh]);
+  }, [autoRefresh, fetchData]);
 
   const totalInstalledSize = useMemo(
     () => installed.reduce((sum, m) => sum + (m.size || 0), 0),
@@ -141,10 +143,10 @@ export default function SystemPage() {
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="font-heading text-3xl font-semibold tracking-tight text-[#242424]">
-            Monitorowanie systemu
+            {t.system.title}
           </h1>
           <p className="mt-1 text-base text-[#898989]">
-            Status Ollamy, modele i parametry środowiska
+            {t.system.subtitle}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -167,7 +169,7 @@ export default function SystemPage() {
 
       <Card className="mb-6">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base font-semibold text-[#242424]">Status połączenia z Ollamą</CardTitle>
+          <CardTitle className="text-base font-semibold text-[#242424]">{t.system.connectionStatus}</CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -194,10 +196,10 @@ export default function SystemPage() {
                 <div className="rounded-full bg-[#f5f5f5] p-2">
                   <CheckCircle2 className="h-5 w-5 text-green-600" />
                 </div>
-                <span className="font-semibold text-[#242424]">Połączenie aktywne</span>
+                <span className="font-semibold text-[#242424]">{t.system.active}</span>
               </div>
               {version && (
-                <Badge variant="secondary">Wersja Ollamy: {version.version}</Badge>
+                <Badge variant="secondary">{t.system.version}: {version.version}</Badge>
               )}
               <Badge variant="outline">
                 Host: {process.env.NEXT_PUBLIC_OLLAMA_HOST || "http://host.docker.internal:11434"}
@@ -209,28 +211,28 @@ export default function SystemPage() {
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          title="Zainstalowane modele"
+          title={t.system.installedModels}
           value={installed.length.toString()}
           sub={formatBytes(totalInstalledSize) + " na dysku"}
           icon={<Database className="h-4 w-4 text-[#898989]" />}
           loading={loading}
         />
         <StatCard
-          title="Załadowane modele"
+          title={t.system.loadedModels}
           value={running.length.toString()}
           sub={formatBytes(totalRunningSize) + " w pamięci"}
           icon={<Activity className="h-4 w-4 text-[#898989]" />}
           loading={loading}
         />
         <StatCard
-          title="VRAM używana"
+          title={t.system.vramUsed}
           value={formatBytes(totalVramSize)}
           sub="Suma size_vram"
           icon={<Cpu className="h-4 w-4 text-[#898989]" />}
           loading={loading}
         />
         <StatCard
-          title="Context size"
+          title={t.system.contextSize}
           value={settings.options.num_ctx.toLocaleString("pl-PL")}
           sub="Globalne ustawienie num_ctx"
           icon={<Server className="h-4 w-4 text-[#898989]" />}
@@ -240,7 +242,7 @@ export default function SystemPage() {
 
       <Card className="mb-6">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base font-semibold text-[#242424]">Załadowane modele (szczegóły)</CardTitle>
+          <CardTitle className="text-base font-semibold text-[#242424]">{t.system.loadedDetails}</CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -251,7 +253,7 @@ export default function SystemPage() {
             </div>
           ) : running.length === 0 ? (
             <div className="text-sm text-[#898989]">
-              Brak aktualnie załadowanych modeli w pamięci.
+              {t.system.noLoaded}
             </div>
           ) : (
             <div className="overflow-x-auto rounded-[8px] border border-[rgba(34,42,53,0.08)]">
@@ -290,7 +292,7 @@ export default function SystemPage() {
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-3">
-          <CardTitle className="text-base font-semibold text-[#242424]">Globalne ustawienia generowania</CardTitle>
+          <CardTitle className="text-base font-semibold text-[#242424]">{t.system.globalSettings}</CardTitle>
           <Settings2 className="h-4 w-4 text-[#898989]" />
         </CardHeader>
         <CardContent>
@@ -304,7 +306,7 @@ export default function SystemPage() {
             <SettingTile label="Top K" value={settings.options.top_k} />
             <SettingTile label="Seed" value={settings.options.seed || "—"} />
             <SettingTile
-              label="Context size"
+              label={t.system.contextSize}
               value={settings.options.num_ctx.toLocaleString("pl-PL")}
             />
             <SettingTile

@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSettings } from "@/lib/settings-context";
+import { useI18n } from "@/lib/i18n-context";
 import { benchmarks } from "@/lib/benchmarks";
 import { generateId } from "@/lib/generate-id";
 import {
@@ -142,6 +143,7 @@ function clearRunningState() {
 
 export default function TestsPage() {
   const settings = useSettings();
+  const { t } = useI18n();
   const [models, setModels] = useState<ModelItem[]>([]);
   const [modelsLoading, setModelsLoading] = useState(true);
   const [loadedModels, setLoadedModels] = useState<string[]>([]);
@@ -202,7 +204,6 @@ export default function TestsPage() {
   const firstTokenTimeRef = useRef<number | null>(null);
   const startTimeRef = useRef<number>(0);
 
-  // Load models and loaded-models status
   useEffect(() => {
     Promise.all([
       fetch("/api/tags").then((res) => res.json()),
@@ -223,14 +224,12 @@ export default function TestsPage() {
       });
   }, []);
 
-  // Persist selected model
   useEffect(() => {
     if (typeof window !== "undefined" && selectedModel) {
       localStorage.setItem(LS_SELECTED_MODEL, selectedModel);
     }
   }, [selectedModel]);
 
-  // Persist running state + beforeunload
   useEffect(() => {
     function handleBeforeUnload() {
       if (runningId) {
@@ -303,7 +302,7 @@ export default function TestsPage() {
 
   async function loadModel() {
     if (!selectedModel) {
-      toast.error("Wybierz model");
+      toast.error(t.tests.chooseModelFirst);
       return;
     }
     setModelLoading(true);
@@ -320,17 +319,16 @@ export default function TestsPage() {
       });
       if (!res.ok) {
         const text = await res.text();
-        toast.error("Błąd ładowania modelu: " + text);
+        toast.error(t.tests.loadError + ": " + text);
       } else {
-        toast.success(`Model ${selectedModel} załadowany do pamięci`);
-        // refresh loaded models
+        toast.success(t.tests.loadSuccess + ": " + selectedModel);
         const psRes = await fetch("/api/ps");
         const psData = await psRes.json();
         setLoadedModels((psData.models || []).map((m: { name: string }) => m.name));
       }
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Błąd";
-      toast.error("Błąd ładowania modelu: " + msg);
+      const msg = e instanceof Error ? e.message : "Error";
+      toast.error(t.tests.loadError + ": " + msg);
     } finally {
       setModelLoading(false);
     }
@@ -338,7 +336,7 @@ export default function TestsPage() {
 
   async function runBenchmark(benchmark: (typeof benchmarks)[0]) {
     if (!selectedModel) {
-      toast.error("Wybierz model przed uruchomieniem testu");
+      toast.error(t.tests.chooseModelFirst);
       return;
     }
     setRunningId(benchmark.id);
@@ -370,7 +368,7 @@ export default function TestsPage() {
       });
       if (!res.ok || !res.body) {
         const text = await res.text();
-        setRunningResponse("Błąd: " + text);
+        setRunningResponse("Error: " + text);
         setRunningStatus(RUNNING_ERROR);
         clearProgressTimer();
         setRunningId(null);
@@ -415,8 +413,8 @@ export default function TestsPage() {
       setRunningProgress(100);
       setRunningStatus(null);
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Błąd";
-      setRunningResponse("Błąd: " + msg);
+      const msg = e instanceof Error ? e.message : "Error";
+      setRunningResponse("Error: " + msg);
       setRunningStatus(RUNNING_ERROR);
       clearProgressTimer();
       setRunningId(null);
@@ -425,15 +423,12 @@ export default function TestsPage() {
 
   async function runSelected() {
     if (selectedIds.length === 0) {
-      toast.error("Zaznacz przynajmniej jeden test");
+      toast.error(t.tests.selectAtLeastOne);
       return;
     }
     const toRun = benchmarks.filter((b) => selectedIds.includes(b.id));
     for (const b of toRun) {
       await runBenchmark(b);
-      // wait until user saves or closes before next if not auto-saving
-      // since runBenchmark doesn't block on save, we just run sequentially
-      // but we need to wait for runningId to clear (save or cancel)
       if (runningStatus === RUNNING_ERROR) break;
     }
     setSelectedIds([]);
@@ -462,7 +457,7 @@ export default function TestsPage() {
     setRating(0);
     setNote("");
     clearRunningState();
-    toast.success("Wynik zapisany");
+    toast.success(t.tests.saveSuccess);
   }
 
   function cancelRunning() {
@@ -489,7 +484,7 @@ export default function TestsPage() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    toast.success("Wyniki wyeksportowane");
+    toast.success(t.tests.exportSuccess);
   }
 
   const modelResults = useMemo(
@@ -506,11 +501,11 @@ export default function TestsPage() {
 
   const statusText = useMemo(() => {
     if (!runningId) return "";
-    if (runningStatus === RUNNING_INIT) return "Inicjalizowanie modelu...";
-    if (runningStatus === RUNNING_GENERATE) return "Generowanie odpowiedzi...";
-    if (runningStatus === RUNNING_ERROR) return "Wystąpił błąd";
-    return "Gotowe — zapisz wynik";
-  }, [runningId, runningStatus]);
+    if (runningStatus === RUNNING_INIT) return t.tests.initStatus;
+    if (runningStatus === RUNNING_GENERATE) return t.tests.generateStatus;
+    if (runningStatus === RUNNING_ERROR) return t.tests.errorStatus;
+    return t.tests.doneStatus;
+  }, [runningId, runningStatus, t]);
 
   const isModelLoaded = selectedModel && loadedModels.includes(selectedModel);
 
@@ -530,14 +525,12 @@ export default function TestsPage() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
-      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="font-heading text-3xl font-semibold tracking-tight text-[#242424]">
-            Testy benchmarkowe
+            {t.tests.title}
           </h1>
-          <p className="mt-1 text-base text-[#898989]">
-            Porównuj modele za pomocą presetowych zadań i zapisuj wyniki
-          </p>
+          <p className="mt-1 text-base text-[#898989]">{t.tests.subtitle}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {modelsLoading ? (
@@ -549,7 +542,7 @@ export default function TestsPage() {
               disabled={models.length === 0}
             >
               <SelectTrigger className="w-[260px]">
-                <SelectValue placeholder="Wybierz model" />
+                <SelectValue placeholder={t.tests.selectModel} />
               </SelectTrigger>
               <SelectContent>
                 {models.map((m) => (
@@ -578,31 +571,44 @@ export default function TestsPage() {
             ) : (
               <Activity className="mr-2 h-4 w-4" />
             )}
-            {modelLoading ? "Ładowanie..." : isModelLoaded ? "Załadowany" : "Załaduj model"}
+            {modelLoading ? t.tests.loading : isModelLoaded ? t.tests.loaded : t.tests.loadModel}
           </Button>
           <Button variant="outline" size="sm" onClick={exportResults}>
             <Download className="mr-2 h-4 w-4" />
-            Eksport
+            {t.tests.export}
           </Button>
         </div>
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <Button
-          size="sm"
-          variant="default"
-          disabled={selectedIds.length === 0 || !selectedModel || runningId !== null}
-          onClick={runSelected}
-        >
-          <ListChecks className="mr-2 h-4 w-4" />
-          Uruchom zaznaczone ({selectedIds.length})
-        </Button>
-        <Button size="sm" variant="ghost" onClick={selectAll}>
-          Zaznacz wszystkie
-        </Button>
-        <Button size="sm" variant="ghost" onClick={deselectAll}>
-          Odznacz wszystkie
-        </Button>
+      <div className="mb-5 rounded-[12px] border border-[rgba(34,42,53,0.08)] bg-white p-4 shadow-soft">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="default"
+              disabled={selectedIds.length === 0 || !selectedModel || runningId !== null}
+              onClick={runSelected}
+            >
+              <ListChecks className="mr-2 h-4 w-4" />
+              {t.tests.runSelected} ({selectedIds.length})
+            </Button>
+            <Button size="sm" variant="ghost" onClick={selectAll}>
+              {t.tests.selectAll}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={deselectAll}>
+              {t.tests.deselectAll}
+            </Button>
+          </div>
+          {selectedModel && (
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-[#898989]">{t.tests.selectModel}:</span>
+              <span className="font-medium text-[#242424]">{selectedModel}</span>
+              {isModelLoaded && (
+                <Badge className="bg-green-600 text-white">{t.tests.loaded}</Badge>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -627,14 +633,12 @@ export default function TestsPage() {
                         <Checkbox
                           checked={selectedIds.includes(b.id)}
                           onCheckedChange={() => toggleBenchmark(b.id)}
-                          aria-label={`Zaznacz ${b.name}`}
+                          aria-label={`Select ${b.name}`}
                         />
                       </div>
                     </CardHeader>
                     <CardContent>
-                      <p className="mb-3 line-clamp-3 text-xs text-[#898989]">
-                        {b.prompt}
-                      </p>
+                      <p className="mb-3 line-clamp-3 text-xs text-[#898989]">{b.prompt}</p>
                       <Button
                         size="sm"
                         className="w-full"
@@ -642,7 +646,7 @@ export default function TestsPage() {
                         onClick={() => runBenchmark(b)}
                       >
                         <Play className="mr-2 h-4 w-4" />
-                        {runningId === b.id ? "Trwa test..." : "Uruchom test"}
+                        {runningId === b.id ? t.tests.running : t.tests.runTest}
                       </Button>
                     </CardContent>
                   </Card>
@@ -654,21 +658,19 @@ export default function TestsPage() {
 
         <div className="space-y-4">
           {runningId && (
-            <Card>
+            <Card className="border-[#242424] ring-1 ring-[#242424]">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold text-[#242424]">Wynik testu</CardTitle>
+                <CardTitle className="text-sm font-semibold text-[#242424]">{t.tests.resultTitle}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <ScrollArea className="h-40 rounded-[8px] border border-[rgba(34,42,53,0.08)] bg-[#fafafa] p-2 text-xs">
                   <pre className="whitespace-pre-wrap text-[#242424]">
-                    {runningResponse || "Oczekiwanie na odpowiedź..."}
+                    {runningResponse || t.tests.waiting}
                   </pre>
                 </ScrollArea>
                 <div className="space-y-1">
                   <div className="flex justify-between text-xs text-[#898989]">
-                    <span>
-                      {runningTime > 0 ? `Czas: ${runningTime} ms` : "Czas: —"}
-                    </span>
+                    <span>{runningTime > 0 ? `${t.tests.time}: ${runningTime} ms` : `${t.tests.time}: ${t.tests.noTime}`}</span>
                     <span>{runningProgress.toFixed(0)}%</span>
                   </div>
                   <Progress value={runningProgress} />
@@ -676,13 +678,13 @@ export default function TestsPage() {
                 </div>
                 {runningStatus === RUNNING_ERROR && (
                   <Button size="sm" variant="outline" className="w-full" onClick={cancelRunning}>
-                    Zamknij
+                    {t.tests.close}
                   </Button>
                 )}
-                {!runningResponse.startsWith("Błąd:") && runningResponse && runningStatus !== RUNNING_ERROR && (
+                {!runningResponse.startsWith("Error:") && runningResponse && runningStatus !== RUNNING_ERROR && (
                   <>
                     <div className="space-y-1">
-                      <Label className="text-xs">Ocena</Label>
+                      <Label className="text-xs">{t.tests.rate}</Label>
                       <div className="flex gap-1">
                         {[1, 2, 3, 4, 5].map((star) => (
                           <Tooltip key={star}>
@@ -706,12 +708,12 @@ export default function TestsPage() {
                       </div>
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Notatka</Label>
+                      <Label className="text-xs">{t.tests.note}</Label>
                       <input
                         className="w-full rounded-[6px] border border-[rgba(34,42,53,0.08)] bg-white px-2 py-1 text-xs text-[#242424]"
                         value={note}
                         onChange={(e) => setNote(e.target.value)}
-                        placeholder="Opcjonalna notatka..."
+                        placeholder={t.tests.notePlaceholder}
                       />
                     </div>
                     <Button
@@ -723,7 +725,7 @@ export default function TestsPage() {
                       }
                     >
                       <Save className="mr-2 h-4 w-4" />
-                      Zapisz wynik
+                      {t.tests.saveResult}
                     </Button>
                   </>
                 )}
@@ -735,7 +737,7 @@ export default function TestsPage() {
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-semibold text-[#242424] flex items-center gap-2">
                 <History className="h-4 w-4" />
-                Historia wyników
+                {t.tests.historyTitle}
                 {selectedModel && (
                   <span className="text-xs font-normal text-[#898989]">
                     ({modelResults.length})
@@ -744,23 +746,21 @@ export default function TestsPage() {
               </CardTitle>
               {results.length > 0 && (
                 <Button variant="ghost" size="sm" className="h-7 text-red-600" onClick={() => { clearAllResults(); setResults(getResults()); }}>
-                  Wyczyść
+                  {t.tests.clearHistory}
                 </Button>
               )}
             </CardHeader>
             <CardContent>
               {selectedModel && avgDuration > 0 && (
                 <div className="mb-3 rounded-[8px] bg-[#f5f5f5] px-3 py-2 text-xs text-[#242424]">
-                  Średni czas generowania dla <strong>{selectedModel}</strong>:{" "}
+                  {t.tests.avgTime} <strong>{selectedModel}</strong>:{" "}
                   <span className="font-semibold">{avgDuration} ms</span>
                 </div>
               )}
               <ScrollArea className="h-[calc(100vh-24rem)]">
                 <div className="space-y-3">
                   {modelResults.length === 0 && (
-                    <div className="text-xs text-[#898989]">
-                      Brak zapisanych wyników.
-                    </div>
+                    <div className="text-xs text-[#898989]">{t.tests.noResults}</div>
                   )}
                   {modelResults
                     .slice()
@@ -783,7 +783,7 @@ export default function TestsPage() {
                         </div>
                         <div className="mb-1 text-[#898989]">
                           Model: <span className="font-medium text-[#242424]">{r.model}</span> •{" "}
-                          Czas: {r.durationMs}ms
+                          {t.tests.time}: {r.durationMs}ms
                         </div>
                         <div className="mb-1 line-clamp-3 text-[#242424]/80">
                           {r.response}

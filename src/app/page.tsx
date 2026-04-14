@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -51,9 +51,11 @@ import {
   MoreHorizontal,
   ServerOff,
   Plus,
+  Loader2,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
+import { useI18n } from "@/lib/i18n-context";
 
 type Model = {
   name: string;
@@ -126,6 +128,7 @@ function useModels() {
 
 export default function Home() {
   const router = useRouter();
+  const { t } = useI18n();
   const { models, loading, ollamaVersion, runningModels, refresh } = useModels();
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<"name" | "size" | "date">("name");
@@ -140,6 +143,7 @@ export default function Home() {
   const [pulling, setPulling] = useState(false);
   const [pullLog, setPullLog] = useState("");
   const [pullProgress, setPullProgress] = useState(0);
+  const [loadingModel, setLoadingModel] = useState<string | null>(null);
 
   async function handleDelete(name: string) {
     if (!confirm(`Czy na pewno chcesz usunąć model "${name}"?`)) return;
@@ -154,6 +158,34 @@ export default function Home() {
       await refresh();
     } catch {
       toast.error("Błąd usuwania modelu");
+    }
+  }
+
+  async function handleLoadModel(name: string) {
+    setLoadingModel(name);
+    try {
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: name,
+          prompt: "Say hello",
+          stream: false,
+          keep_alive: "5m",
+        }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        toast.error(t.home.loadError + ": " + text);
+      } else {
+        toast.success(t.home.loadSuccess + ": " + name);
+        await refresh();
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Error";
+      toast.error(t.home.loadError + ": " + msg);
+    } finally {
+      setLoadingModel(null);
     }
   }
 
@@ -264,10 +296,10 @@ export default function Home() {
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="font-heading text-3xl font-semibold tracking-tight text-[#242424]">
-            Modele lokalne
+            {t.home.title}
           </h1>
           <p className="mt-1 text-base text-[#898989]">
-            Zarządzaj i testuj modele dostępne przez Ollama
+            {t.home.subtitle}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -373,14 +405,16 @@ export default function Home() {
 
       {!loading && viewMode === "grid" && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filteredModels.map((model) => (
-            <Card key={model.digest} className="group flex flex-col transition-all hover:shadow-card-hover">
+          {filteredModels.map((model) => {
+            const isLoaded = runningModels.includes(model.name);
+            return (
+            <Card key={model.digest} className={cn("group flex flex-col transition-all hover:shadow-card-hover", isLoaded && "border-green-500 ring-1 ring-green-500")}>
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <CardTitle className="break-all text-base font-semibold flex items-center gap-2 text-[#242424]">
                       {model.name}
-                      {runningModels.includes(model.name) && (
+                      {isLoaded && (
                         <Activity className="h-4 w-4 text-green-600" />
                       )}
                     </CardTitle>
@@ -397,7 +431,7 @@ export default function Home() {
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem onClick={() => openDetails(model)}>
                         <Info className="mr-2 h-4 w-4" />
-                        Szczegóły
+                        {t.home.details}
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() =>
@@ -405,14 +439,14 @@ export default function Home() {
                         }
                       >
                         <MessageSquare className="mr-2 h-4 w-4" />
-                        Chat
+                        {t.home.chat}
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         className="text-red-600 focus:text-red-600"
                         onClick={() => handleDelete(model.name)}
                       >
                         <Trash2 className="mr-2 h-4 w-4" />
-                        Usuń
+                        {t.home.delete}
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -430,26 +464,46 @@ export default function Home() {
                   {model.details?.family && (
                     <Badge variant="outline">{model.details.family}</Badge>
                   )}
-                  {runningModels.includes(model.name) && (
-                    <Badge className="bg-[#242424] text-white">
-                      Załadowany
+                  {isLoaded && (
+                    <Badge className="bg-green-600 text-white">
+                      {t.home.loadedModel}
                     </Badge>
                   )}
                 </div>
               </CardContent>
-              <div className="px-6 pb-5">
-                <Link
-                  href={`/chat?model=${encodeURIComponent(model.name)}`}
-                  className="block w-full"
+              <div className="px-6 pb-5 space-y-2">
+                <Button
+                  className="w-full"
+                  variant="secondary"
+                  onClick={() => router.push(`/chat?model=${encodeURIComponent(model.name)}`)}
                 >
-                  <Button className="w-full" variant="secondary">
-                    <MessageSquare className="mr-2 h-4 w-4" />
-                    Wybierz do chatu
-                  </Button>
-                </Link>
+                  <MessageSquare className="mr-2 h-4 w-4" />
+                  {t.home.chooseChat}
+                </Button>
+                <Button
+                  className="w-full"
+                  variant="outline"
+                  size="sm"
+                  disabled={loadingModel === model.name}
+                  onClick={() => handleLoadModel(model.name)}
+                >
+                  {loadingModel === model.name ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : isLoaded ? (
+                    <Activity className="mr-2 h-4 w-4 text-green-600" />
+                  ) : (
+                    <Cpu className="mr-2 h-4 w-4" />
+                  )}
+                  {loadingModel === model.name
+                    ? t.home.loadingModel
+                    : isLoaded
+                    ? t.home.loadedModel
+                    : t.home.loadModel}
+                </Button>
               </div>
             </Card>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -468,7 +522,7 @@ export default function Home() {
               className="grid grid-cols-12 items-center gap-4 border-b border-[rgba(34,42,53,0.08)] px-4 py-3 text-sm last:border-b-0 hover:bg-[#f5f5f5]/50 transition-colors"
             >
               <div className="col-span-4 flex items-center gap-2">
-                <span className="font-medium text-[#242424] break-all">{model.name}</span>
+                <span className={cn("font-medium break-all", runningModels.includes(model.name) ? "text-green-700" : "text-[#242424]")}>{model.name}</span>
                 {runningModels.includes(model.name) && (
                   <Activity className="h-4 w-4 text-green-600" />
                 )}
@@ -492,11 +546,30 @@ export default function Home() {
                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openDetails(model)}>
                   <Info className="h-4 w-4" />
                 </Button>
-                <Link href={`/chat?model=${encodeURIComponent(model.name)}`}>
-                  <Button variant="ghost" size="icon" className="h-8 w-8">
-                    <MessageSquare className="h-4 w-4" />
-                  </Button>
-                </Link>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => router.push(`/chat?model=${encodeURIComponent(model.name)}`)}
+                >
+                  <MessageSquare className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  disabled={loadingModel === model.name}
+                  onClick={() => handleLoadModel(model.name)}
+                  title={t.home.loadModel}
+                >
+                  {loadingModel === model.name ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : runningModels.includes(model.name) ? (
+                    <Activity className="h-4 w-4 text-green-600" />
+                  ) : (
+                    <Cpu className="h-4 w-4" />
+                  )}
+                </Button>
                 <Button
                   variant="ghost"
                   size="icon"
@@ -516,16 +589,16 @@ export default function Home() {
           <div className="rounded-full bg-[#f5f5f5] p-4">
             <Cpu className="h-6 w-6 text-[#898989]" />
           </div>
-          <h3 className="mt-4 font-heading text-base font-semibold text-[#242424]">Brak modeli</h3>
+          <h3 className="mt-4 font-heading text-base font-semibold text-[#242424]">{t.home.noModels}</h3>
           <p className="mt-1 text-sm text-[#898989] max-w-sm">
             {search || familyFilter !== "all"
-              ? "Spróbuj zmienić filtry wyszukiwania."
-              : "Upewnij się, że Ollama działa i jest dostępna pod zdefiniowanym adresem."}
+              ? t.home.noModelsFilter
+              : t.home.noModelsHint}
           </p>
           {!search && familyFilter === "all" && (
             <Button className="mt-5" variant="outline" onClick={() => setPullOpen(true)}>
               <Download className="mr-2 h-4 w-4" />
-              Pobierz pierwszy model
+              {t.home.pullFirst}
             </Button>
           )}
         </div>
@@ -534,10 +607,8 @@ export default function Home() {
       <Dialog open={pullOpen} onOpenChange={setPullOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Pobierz model z Ollama</DialogTitle>
-            <DialogDescription>
-              Wpisz nazwę modelu lub wybierz z listy popularnych.
-            </DialogDescription>
+            <DialogTitle>{t.home.pullTitle}</DialogTitle>
+            <DialogDescription>{t.home.pullDesc}</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">
             <div className="grid gap-2">
@@ -565,7 +636,7 @@ export default function Home() {
             {pulling && (
               <div className="space-y-1">
                 <div className="flex justify-between text-xs text-[#898989]">
-                  <span>Postęp pobierania</span>
+                  <span>{t.home.pullProgress}</span>
                   <span>{pullProgress}%</span>
                 </div>
                 <Progress value={pullProgress} />
@@ -579,7 +650,7 @@ export default function Home() {
           </div>
           <DialogFooter>
             <Button onClick={handlePull} disabled={pulling || !pullName.trim()}>
-              {pulling ? "Pobieranie..." : "Rozpocznij"}
+              {pulling ? t.home.pullRunning : t.home.pullStart}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -588,11 +659,11 @@ export default function Home() {
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Szczegóły modelu</DialogTitle>
+            <DialogTitle>{t.home.details}</DialogTitle>
             <DialogDescription>{selectedModel?.name}</DialogDescription>
           </DialogHeader>
           {detailsLoading ? (
-            <div className="py-6 text-sm text-[#898989]">Ładowanie szczegółów...</div>
+            <div className="py-6 text-sm text-[#898989]">Loading details...</div>
           ) : (
             <ScrollArea className="max-h-[60vh]">
               <div className="space-y-4 pr-4 text-sm">

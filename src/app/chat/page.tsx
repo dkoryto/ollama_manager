@@ -48,6 +48,7 @@ import {
   PanelRightClose,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useI18n } from "@/lib/i18n-context";
 
 type ModelItem = {
   name: string;
@@ -62,6 +63,7 @@ type ChatOptions = {
 };
 
 export default function ChatPage() {
+  const { t } = useI18n();
   const globalSettings = useSettings();
   const [models, setModels] = useState<ModelItem[]>([]);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -181,7 +183,7 @@ export default function ChatPage() {
       { role: "assistant", content: "" },
     ];
 
-    const title = activeSession.title === "Nowy chat" ? generateTitle(newMessages) : activeSession.title;
+    const title = activeSession.title === t.chat.newChat ? generateTitle(newMessages) : activeSession.title;
     updateChatSession(activeSession.id, { messages: newMessages, title });
     setSessions(getChatSessions());
 
@@ -270,7 +272,7 @@ export default function ChatPage() {
     return (
       <div className="flex h-full flex-col">
         <div className="flex items-center justify-between border-b border-[rgba(34,42,53,0.08)] p-3">
-          <span className="text-sm font-semibold text-[#242424]">Konwersacje</span>
+          <span className="text-sm font-semibold text-[#242424]">{t.chat.conversations}</span>
           <Button size="icon" variant="ghost" onClick={() => handleNewChat()}>
             <Plus className="h-4 w-4" />
           </Button>
@@ -278,7 +280,7 @@ export default function ChatPage() {
         <div className="flex-1 overflow-auto p-2">
           {sessions.length === 0 && (
             <div className="px-2 py-6 text-center text-xs text-[#898989]">
-              Brak zapisanych chatów.
+              {t.chat.noSavedChats}
             </div>
           )}
           <div className="space-y-1">
@@ -353,7 +355,7 @@ export default function ChatPage() {
               disabled={models.length === 0 || streaming}
             >
               <SelectTrigger className="w-[220px]">
-                <SelectValue placeholder="Wybierz model" />
+                <SelectValue placeholder={t.chat.selectModel} />
               </SelectTrigger>
               <SelectContent>
                 {models.map((m) => (
@@ -365,7 +367,7 @@ export default function ChatPage() {
             </Select>
             {avgRating !== null && (
               <span className="hidden text-sm text-[#898989] sm:inline">
-                Średnia ocena: <strong>{avgRating}</strong>/5
+                {t.chat.avgRating}: <strong>{avgRating}</strong>/5
               </span>
             )}
           </div>
@@ -377,14 +379,14 @@ export default function ChatPage() {
             >
               <Settings2 className="mr-2 h-4 w-4" />
               <span className="hidden sm:inline">
-                {showSettings ? "Ukryj" : "Ustawienia"}
+                {showSettings ? "Hide" : t.chat.settings}
               </span>
             </Button>
             <Button
               variant="outline"
               size="sm"
               onClick={() => setWideMode((w) => !w)}
-              title={wideMode ? "Zwęż widok" : "Rozszerz widok"}
+              title={wideMode ? t.chat.narrow : t.chat.widen}
             >
               {wideMode ? (
                 <PanelRightClose className="mr-2 h-4 w-4" />
@@ -401,7 +403,7 @@ export default function ChatPage() {
               onClick={() => activeSession && handleNewChat(activeSession.model)}
             >
               <Plus className="mr-2 h-4 w-4" />
-              <span className="hidden sm:inline">Nowy chat</span>
+              <span className="hidden sm:inline">{t.chat.newChat}</span>
             </Button>
           </div>
         </div>
@@ -487,7 +489,7 @@ export default function ChatPage() {
 
         {!activeSession?.model && (
           <div className="mx-4 mt-4 rounded-[8px] border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-            Wybierz model z listy, aby rozpocząć rozmowę.
+            {t.chat.noModelWarning}
           </div>
         )}
 
@@ -539,7 +541,7 @@ export default function ChatPage() {
                   {msg.role === "assistant" && msg.content && !streaming && (
                     <div className="mt-1 flex gap-3 justify-start pl-11">
                       <div className="max-w-[85%] rounded-xl bg-white px-3 py-1.5 text-xs shadow-soft border border-[rgba(34,42,53,0.08)]">
-                        <div className="mb-1 text-[#898989]">Oceń odpowiedź:</div>
+                        <div className="mb-1 text-[#898989]">{t.chat.rateAnswer}</div>
                         <div className="flex gap-1">
                           {[1, 2, 3, 4, 5].map((star) => (
                             <Tooltip key={star}>
@@ -593,7 +595,7 @@ export default function ChatPage() {
               className="h-auto"
             >
               <Send className="mr-2 h-4 w-4" />
-              Wyślij
+              {t.chat.send}
             </Button>
           </div>
         </div>
@@ -604,16 +606,17 @@ export default function ChatPage() {
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
+  const { t } = useI18n();
   return (
     <button
       onClick={() => {
         navigator.clipboard.writeText(text);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
-        toast.success("Skopiowano do schowka");
+        toast.success(t.chat.copied);
       }}
       className="absolute -bottom-2 -right-2 rounded-full border border-[rgba(34,42,53,0.08)] bg-white p-1 text-[#898989] shadow-soft hover:text-[#242424]"
-      title="Kopiuj"
+      title="Copy"
     >
       {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
     </button>
