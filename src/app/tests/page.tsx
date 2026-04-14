@@ -353,7 +353,7 @@ export default function TestsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: selectedModel,
-          prompt: "",
+          prompt: "hi",
           stream: false,
           keep_alive: 0,
         }),
@@ -363,6 +363,7 @@ export default function TestsPage() {
         toast.error(t.tests.loadError + ": " + text);
       } else {
         toast.success(t.tests.unloadSuccess + ": " + selectedModel);
+        await new Promise((r) => setTimeout(r, 800));
         const psRes = await fetch("/api/ps");
         const psData = await psRes.json();
         setLoadedModels((psData.models || []).map((m: { name: string }) => m.name));
@@ -451,6 +452,7 @@ export default function TestsPage() {
       clearProgressTimer();
       setRunningProgress(100);
       setRunningStatus(null);
+      submitResult(benchmark);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Error";
       setRunningResponse("Error: " + msg);
