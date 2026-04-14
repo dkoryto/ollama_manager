@@ -716,7 +716,7 @@ export default function TestsPage() {
                 <CardTitle className="text-sm font-semibold text-[#242424]">{t.tests.resultTitle}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <ScrollArea className="h-40 rounded-[8px] border border-[rgba(34,42,53,0.08)] bg-[#fafafa] p-2 text-xs">
+                <ScrollArea className="h-64 rounded-[8px] border border-[rgba(34,42,53,0.08)] bg-[#fafafa] p-2 text-xs">
                   <pre className="whitespace-pre-wrap text-[#242424]">
                     {runningResponse || t.tests.waiting}
                   </pre>

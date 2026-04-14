@@ -70,6 +70,7 @@ export default function SystemPage() {
   const [loading, setLoading] = useState(true);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [gpu, setGpu] = useState<{ totalMb: number; usedMb: number; freeMb: number; source: string } | null>(null);
+  const [systemInfo, setSystemInfo] = useState<{ temperature: number | null; memory: { totalMb: number; freeMb: number; usedMb: number } | null } | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -109,11 +110,14 @@ export default function SystemPage() {
       }
 
       try {
-        const gpuRes = await fetch("/api/gpu");
+        const [gpuRes, sysRes] = await Promise.all([fetch("/api/gpu"), fetch("/api/system-info")]);
         const gpuData = await gpuRes.json();
+        const sysData = await sysRes.json();
         setGpu(gpuData);
+        setSystemInfo(sysData);
       } catch {
         setGpu(null);
+        setSystemInfo(null);
       }
     } catch {
       toast.error("Error fetching system data");
@@ -218,7 +222,7 @@ export default function SystemPage() {
         </CardContent>
       </Card>
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard
           title={t.system.installedModels}
           value={installed.length.toString()}
@@ -245,6 +249,20 @@ export default function SystemPage() {
           value={settings.options.num_ctx.toLocaleString("pl-PL")}
           sub="Globalne ustawienie num_ctx"
           icon={<Server className="h-4 w-4 text-[#898989]" />}
+          loading={loading}
+        />
+        <StatCard
+          title={t.system.temperature}
+          value={systemInfo?.temperature != null ? `${systemInfo.temperature.toFixed(1)} °C` : "—"}
+          sub={t.system.memory}
+          icon={<Thermometer className="h-4 w-4 text-[#898989]" />}
+          loading={loading}
+        />
+        <StatCard
+          title={t.system.memory}
+          value={systemInfo?.memory ? `${Math.round(systemInfo.memory.usedMb / 1024)} / ${Math.round(systemInfo.memory.totalMb / 1024)} GB` : "—"}
+          sub={systemInfo?.memory ? `${Math.round(systemInfo.memory.freeMb / 1024)} GB ${t.system.memoryAvailable}` : "—"}
+          icon={<Database className="h-4 w-4 text-[#898989]" />}
           loading={loading}
         />
       </div>

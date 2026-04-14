@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Slider } from "@/components/ui/slider";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -66,6 +67,7 @@ export default function ChatPage() {
   const { t } = useI18n();
   const globalSettings = useSettings();
   const [models, setModels] = useState<ModelItem[]>([]);
+  const [loadedModels, setLoadedModels] = useState<string[]>([]);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [input, setInput] = useState("");
@@ -81,19 +83,14 @@ export default function ChatPage() {
   });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [wideMode, setWideMode] = useState(true);
+  const [multiMode, setMultiMode] = useState(false);
+  const [selectedMultiModels, setSelectedMultiModels] = useState<string[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const activeSession = sessions.find((s) => s.id === activeId) || null;
 
   useEffect(() => {
-    fetch("/api/tags")
-      .then((res) => res.json())
-      .then((data) => {
-        const list = (data.models || []).map((m: { name: string }) => ({ name: m.name }));
-        setModels(list);
-      })
-      .catch(() => setModels([]));
-
+    fetchModels();
     const stored = getChatSessions();
     setSessions(stored);
 
@@ -117,6 +114,21 @@ export default function ChatPage() {
       }
     }
   }, []);
+
+  async function fetchModels() {
+    try {
+      const [tagsRes, psRes] = await Promise.all([fetch("/api/tags"), fetch("/api/ps")]);
+      const tagsData = await tagsRes.json();
+      const psData = await psRes.json();
+      const list = (tagsData.models || []).map((m: { name: string }) => ({ name: m.name }));
+      setModels(list);
+      const loaded = (psData.models || []).map((m: { name: string }) => m.name);
+      setLoadedModels(loaded);
+    } catch {
+      setModels([]);
+      setLoadedModels([]);
+    }
+  }
 
   useEffect(() => {
     setOptions({
@@ -143,6 +155,8 @@ export default function ChatPage() {
     setSessions(next);
     setActiveId(session.id);
     setMobileMenuOpen(false);
+    setMultiMode(false);
+    setSelectedMultiModels([]);
   }
 
   function handleDeleteSession(id: string) {
@@ -163,32 +177,22 @@ export default function ChatPage() {
     setSessions(getChatSessions());
   }
 
-  const avgRating = (() => {
+  const avgRating = useMemo(() => {
     if (!activeSession) return null;
     const ratings = activeSession.messages
       .filter((m) => m.role === "assistant" && typeof m.rating === "number")
       .map((m) => m.rating as number);
     if (ratings.length === 0) return null;
     return (ratings.reduce((sum, r) => sum + r, 0) / ratings.length).toFixed(1);
-  })();
+  }, [activeSession]);
 
-  async function handleSend() {
-    if (!input.trim() || !activeSession || streaming) return;
-    const userMsg = input.trim();
-    setInput("");
-
-    const newMessages: ChatMessage[] = [
-      ...activeSession.messages,
-      { role: "user", content: userMsg },
-      { role: "assistant", content: "" },
-    ];
-
-    const title = activeSession.title === t.chat.newChat ? generateTitle(newMessages) : activeSession.title;
-    updateChatSession(activeSession.id, { messages: newMessages, title });
-    setSessions(getChatSessions());
-
-    setStreaming(true);
-    const apiMessages = activeSession.messages.map((m) => ({ role: m.role, content: m.content }));
+  async function sendToModel(modelName: string, userMsg: string, sessionId: string, messageIndex: number) {
+    const currentSession = getChatSessions().find((s) => s.id === sessionId);
+    if (!currentSession) return;
+    const apiMessages = currentSession.messages
+      .slice(0, messageIndex)
+      .filter((m) => m.role === "user" || m.role === "assistant")
+      .map((m) => ({ role: m.role, content: m.content }));
     apiMessages.push({ role: "user", content: userMsg });
 
     try {
@@ -196,7 +200,7 @@ export default function ChatPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: activeSession.model,
+          model: modelName,
           messages: apiMessages,
           stream: true,
           system: systemPrompt || undefined,
@@ -211,10 +215,13 @@ export default function ChatPage() {
       });
       if (!res.ok || !res.body) {
         const text = await res.text();
-        const finalMessages: ChatMessage[] = [...newMessages];
-        finalMessages[finalMessages.length - 1].content = "Błąd: " + text;
-        updateChatSession(activeSession.id, { messages: finalMessages });
-        setSessions(getChatSessions());
+        const current = getChatSessions().find((s) => s.id === sessionId);
+        if (current) {
+          const msgs = [...current.messages];
+          msgs[messageIndex] = { role: "assistant", content: "Błąd: " + text, model: modelName };
+          updateChatSession(sessionId, { messages: msgs });
+          setSessions(getChatSessions());
+        }
         return;
       }
       const reader = res.body.getReader();
@@ -236,11 +243,11 @@ export default function ChatPage() {
               const obj = JSON.parse(line);
               if (obj.message?.content) {
                 assistantContent += obj.message.content;
-                const current = getChatSessions().find((s) => s.id === activeSession.id);
+                const current = getChatSessions().find((s) => s.id === sessionId);
                 if (current) {
                   const msgs = [...current.messages];
-                  msgs[msgs.length - 1] = { role: "assistant", content: assistantContent };
-                  updateChatSession(activeSession.id, { messages: msgs });
+                  msgs[messageIndex] = { role: "assistant", content: assistantContent, model: modelName };
+                  updateChatSession(sessionId, { messages: msgs });
                   setSessions(getChatSessions());
                 }
               }
@@ -249,20 +256,46 @@ export default function ChatPage() {
                 break;
               }
             } catch {
-              // empty
+              // ignore
             }
           }
         }
       }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Unknown error";
-      const current = getChatSessions().find((s) => s.id === activeSession.id);
+      const current = getChatSessions().find((s) => s.id === sessionId);
       if (current) {
         const msgs = [...current.messages];
-        msgs[msgs.length - 1] = { role: "assistant", content: "Błąd: " + msg };
-        updateChatSession(activeSession.id, { messages: msgs });
+        msgs[messageIndex] = { role: "assistant", content: "Błąd: " + msg, model: modelName };
+        updateChatSession(sessionId, { messages: msgs });
         setSessions(getChatSessions());
       }
+    }
+  }
+
+  async function handleSend() {
+    if (!input.trim() || !activeSession || streaming) return;
+    const userMsg = input.trim();
+    setInput("");
+
+    const isMulti = multiMode && selectedMultiModels.length > 0;
+    const targetModels = isMulti ? selectedMultiModels : [activeSession.model];
+
+    const newMessages: ChatMessage[] = [...activeSession.messages, { role: "user", content: userMsg }];
+    targetModels.forEach((m) => {
+      newMessages.push({ role: "assistant", content: "", model: m });
+    });
+
+    const title = activeSession.title === t.chat.newChat ? generateTitle(newMessages) : activeSession.title;
+    updateChatSession(activeSession.id, { messages: newMessages, title });
+    setSessions(getChatSessions());
+
+    setStreaming(true);
+    const baseIndex = activeSession.messages.length + 1; // after user msg
+    try {
+      await Promise.all(
+        targetModels.map((m, idx) => sendToModel(m, userMsg, activeSession.id, baseIndex + idx))
+      );
     } finally {
       setStreaming(false);
     }
@@ -279,9 +312,7 @@ export default function ChatPage() {
         </div>
         <div className="flex-1 overflow-auto p-2">
           {sessions.length === 0 && (
-            <div className="px-2 py-6 text-center text-xs text-[#898989]">
-              {t.chat.noSavedChats}
-            </div>
+            <div className="px-2 py-6 text-center text-xs text-[#898989]">{t.chat.noSavedChats}</div>
           )}
           <div className="space-y-1">
             {sessions.map((session) => (
@@ -300,9 +331,7 @@ export default function ChatPage() {
                 <MessageSquare className="h-4 w-4 shrink-0 text-[#898989]" />
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-medium">{session.title}</div>
-                  <div className="truncate text-xs text-[#898989]">
-                    {session.model}
-                  </div>
+                  <div className="truncate text-xs text-[#898989]">{session.model}</div>
                 </div>
                 <div
                   className="shrink-0 opacity-0 group-hover:opacity-100"
@@ -340,32 +369,92 @@ export default function ChatPage() {
         </Sheet>
       </div>
 
-      <div className={cn("flex flex-col", wideMode ? "flex-1" : "max-w-4xl w-full mx-auto border-x border-[rgba(34,42,53,0.08)] bg-white")}>
+      <div
+        className={cn(
+          "flex flex-col",
+          wideMode
+            ? "flex-1"
+            : "max-w-4xl w-full mx-auto border-x border-[rgba(34,42,53,0.08)] bg-white"
+        )}
+      >
         <div className="flex items-center justify-between gap-3 border-b border-[rgba(34,42,53,0.08)] bg-white px-4 py-3">
           <div className="flex items-center gap-2 md:ml-0 ml-12">
             <Bot className="h-5 w-5 text-[#898989]" />
-            <Select
-              value={activeSession?.model || undefined}
-              onValueChange={(v) => {
-                if (activeSession && v) {
-                  updateChatSession(activeSession.id, { model: v });
-                  setSessions(getChatSessions());
-                }
-              }}
-              disabled={models.length === 0 || streaming}
-            >
-              <SelectTrigger className="w-[220px]">
-                <SelectValue placeholder={t.chat.selectModel} />
-              </SelectTrigger>
-              <SelectContent>
-                {models.map((m) => (
-                  <SelectItem key={m.name} value={m.name}>
-                    {m.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {avgRating !== null && (
+            {multiMode ? (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setMultiMode(false)}
+                >
+                  {activeSession?.model || t.chat.selectModel}
+                </Button>
+                <div className="hidden sm:flex items-center gap-2">
+                  {models.map((m) => (
+                    <label
+                      key={m.name}
+                      className="flex cursor-pointer items-center gap-1 rounded-[8px] border border-[rgba(34,42,53,0.08)] px-2 py-1 text-xs hover:bg-[#f5f5f5]"
+                    >
+                      <Checkbox
+                        checked={selectedMultiModels.includes(m.name)}
+                        onCheckedChange={() =>
+                          setSelectedMultiModels((prev) =>
+                            prev.includes(m.name)
+                              ? prev.filter((x) => x !== m.name)
+                              : [...prev, m.name]
+                          )
+                        }
+                      />
+                      <span className="whitespace-nowrap">{m.name}</span>
+                    </label>
+                  ))}
+                </div>
+                <div className="sm:hidden">
+                  <Select
+                    value={selectedMultiModels[0] || undefined}
+                    onValueChange={(v) => {
+                      if (v && !selectedMultiModels.includes(v)) {
+                        setSelectedMultiModels((prev) => [...prev, v]);
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="w-[160px]">
+                      <SelectValue placeholder={t.chat.selectModels} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {models.map((m) => (
+                        <SelectItem key={m.name} value={m.name}>
+                          {m.name} {selectedMultiModels.includes(m.name) ? "✓" : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            ) : (
+              <Select
+                value={activeSession?.model || undefined}
+                onValueChange={(v) => {
+                  if (activeSession && v) {
+                    updateChatSession(activeSession.id, { model: v });
+                    setSessions(getChatSessions());
+                  }
+                }}
+                disabled={models.length === 0 || streaming}
+              >
+                <SelectTrigger className="w-[220px]">
+                  <SelectValue placeholder={t.chat.selectModel} />
+                </SelectTrigger>
+                <SelectContent>
+                  {models.map((m) => (
+                    <SelectItem key={m.name} value={m.name}>
+                      {m.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {!multiMode && avgRating !== null && (
               <span className="hidden text-sm text-[#898989] sm:inline">
                 {t.chat.avgRating}: <strong>{avgRating}</strong>/5
               </span>
@@ -373,14 +462,22 @@ export default function ChatPage() {
           </div>
           <div className="flex items-center gap-2">
             <Button
-              variant="outline"
+              variant={multiMode ? "default" : "outline"}
               size="sm"
-              onClick={() => setShowSettings((s) => !s)}
+              onClick={() => {
+                setMultiMode((m) => !m);
+                if (!multiMode) {
+                  // entering multi mode: default to loaded models or all models
+                  setSelectedMultiModels(loadedModels.length ? loadedModels : models.map((m) => m.name));
+                }
+              }}
+              disabled={streaming}
             >
+              {multiMode ? t.chat.askAll : t.chat.askSelected}
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setShowSettings((s) => !s)}>
               <Settings2 className="mr-2 h-4 w-4" />
-              <span className="hidden sm:inline">
-                {showSettings ? "Hide" : t.chat.settings}
-              </span>
+              <span className="hidden sm:inline">{showSettings ? "Hide" : t.chat.settings}</span>
             </Button>
             <Button
               variant="outline"
@@ -388,20 +485,10 @@ export default function ChatPage() {
               onClick={() => setWideMode((w) => !w)}
               title={wideMode ? t.chat.narrow : t.chat.widen}
             >
-              {wideMode ? (
-                <PanelRightClose className="mr-2 h-4 w-4" />
-              ) : (
-                <PanelRight className="mr-2 h-4 w-4" />
-              )}
-              <span className="hidden sm:inline">
-                {wideMode ? "Zwęż" : "Rozszerz"}
-              </span>
+              {wideMode ? <PanelRightClose className="mr-2 h-4 w-4" /> : <PanelRight className="mr-2 h-4 w-4" />}
+              <span className="hidden sm:inline">{wideMode ? "Zwęż" : "Rozszerz"}</span>
             </Button>
-            <Button
-              variant="default"
-              size="sm"
-              onClick={() => activeSession && handleNewChat(activeSession.model)}
-            >
+            <Button variant="default" size="sm" onClick={() => activeSession && handleNewChat(activeSession.model)}>
               <Plus className="mr-2 h-4 w-4" />
               <span className="hidden sm:inline">{t.chat.newChat}</span>
             </Button>
@@ -414,9 +501,7 @@ export default function ChatPage() {
               <Label>Temperature: {options.temperature}</Label>
               <Slider
                 value={[options.temperature]}
-                onValueChange={(v) =>
-                  setOptions((o) => ({ ...o, temperature: Array.isArray(v) ? v[0] : v }))
-                }
+                onValueChange={(v) => setOptions((o) => ({ ...o, temperature: Array.isArray(v) ? v[0] : v }))}
                 min={0}
                 max={2}
                 step={0.1}
@@ -426,9 +511,7 @@ export default function ChatPage() {
               <Label>Top P: {options.top_p}</Label>
               <Slider
                 value={[options.top_p]}
-                onValueChange={(v) =>
-                  setOptions((o) => ({ ...o, top_p: Array.isArray(v) ? v[0] : v }))
-                }
+                onValueChange={(v) => setOptions((o) => ({ ...o, top_p: Array.isArray(v) ? v[0] : v }))}
                 min={0}
                 max={1}
                 step={0.05}
@@ -438,9 +521,7 @@ export default function ChatPage() {
               <Label>Top K: {options.top_k}</Label>
               <Slider
                 value={[options.top_k]}
-                onValueChange={(v) =>
-                  setOptions((o) => ({ ...o, top_k: Array.isArray(v) ? v[0] : v }))
-                }
+                onValueChange={(v) => setOptions((o) => ({ ...o, top_k: Array.isArray(v) ? v[0] : v }))}
                 min={1}
                 max={100}
                 step={1}
@@ -452,12 +533,7 @@ export default function ChatPage() {
                 id="chat-num_ctx"
                 type="number"
                 value={options.num_ctx}
-                onChange={(e) =>
-                  setOptions((o) => ({
-                    ...o,
-                    num_ctx: parseInt(e.target.value || "0", 10),
-                  }))
-                }
+                onChange={(e) => setOptions((o) => ({ ...o, num_ctx: parseInt(e.target.value || "0", 10) }))}
               />
             </div>
             <div className="space-y-2">
@@ -466,12 +542,7 @@ export default function ChatPage() {
                 id="chat-seed"
                 type="number"
                 value={options.seed}
-                onChange={(e) =>
-                  setOptions((o) => ({
-                    ...o,
-                    seed: parseInt(e.target.value || "0", 10),
-                  }))
-                }
+                onChange={(e) => setOptions((o) => ({ ...o, seed: parseInt(e.target.value || "0", 10) }))}
               />
             </div>
             <div className="space-y-2 sm:col-span-2 lg:col-span-3">
@@ -487,9 +558,14 @@ export default function ChatPage() {
           </div>
         )}
 
-        {!activeSession?.model && (
+        {!activeSession?.model && !multiMode && (
           <div className="mx-4 mt-4 rounded-[8px] border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
             {t.chat.noModelWarning}
+          </div>
+        )}
+        {multiMode && selectedMultiModels.length === 0 && (
+          <div className="mx-4 mt-4 rounded-[8px] border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+            {t.chat.selectModels}
           </div>
         )}
 
@@ -497,22 +573,14 @@ export default function ChatPage() {
           <ScrollArea className="h-full px-4 py-4">
             <div className="mx-auto max-w-3xl space-y-5">
               {!activeSession && (
-                <div className="py-10 text-center text-[#898989]">
-                  Wybierz lub utwórz nowy chat.
-                </div>
+                <div className="py-10 text-center text-[#898989]">{t.chat.noChatSelected}</div>
               )}
               {activeSession?.messages.length === 0 && (
-                <div className="py-10 text-center text-sm text-[#898989]">
-                  Rozpocznij rozmowę wpisując wiadomość poniżej.
-                </div>
+                <div className="py-10 text-center text-sm text-[#898989]">{t.chat.startTyping}</div>
               )}
               {activeSession?.messages.map((msg, idx) => (
                 <div key={idx}>
-                  <div
-                    className={`flex gap-3 ${
-                      msg.role === "user" ? "justify-end" : "justify-start"
-                    }`}
-                  >
+                  <div className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                     {msg.role === "assistant" && (
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f5f5f5]">
                         <Bot className="h-4 w-4 text-[#242424]" />
@@ -525,12 +593,13 @@ export default function ChatPage() {
                           : "bg-white text-[#242424] border border-[rgba(34,42,53,0.08)] shadow-soft"
                       }`}
                     >
-                      {msg.content || (
-                        <span className="animate-pulse">…</span>
+                      {msg.model && (
+                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[#898989]">
+                          {msg.model}
+                        </div>
                       )}
-                      {msg.role === "assistant" && msg.content && (
-                        <CopyButton text={msg.content} />
-                      )}
+                      {msg.content || <span className="animate-pulse">…</span>}
+                      {msg.role === "assistant" && msg.content && <CopyButton text={msg.content} />}
                     </div>
                     {msg.role === "user" && (
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#242424] text-white">
@@ -585,13 +654,18 @@ export default function ChatPage() {
                 }
               }}
               placeholder="Wpisz wiadomość... (Enter wyśle, Shift+Enter nowa linia)"
-              disabled={streaming || !activeSession}
+              disabled={streaming || !activeSession || (multiMode && selectedMultiModels.length === 0)}
               rows={2}
               className="min-h-[64px] flex-1 resize-none"
             />
             <Button
               onClick={handleSend}
-              disabled={streaming || !input.trim() || !activeSession}
+              disabled={
+                streaming ||
+                !input.trim() ||
+                !activeSession ||
+                (multiMode && selectedMultiModels.length === 0)
+              }
               className="h-auto"
             >
               <Send className="mr-2 h-4 w-4" />

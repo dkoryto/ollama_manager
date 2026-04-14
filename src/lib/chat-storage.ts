@@ -2,6 +2,7 @@ export type ChatMessage = {
   role: "user" | "assistant";
   content: string;
   rating?: number;
+  model?: string;
 };
 
 export type ChatSession = {

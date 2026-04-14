@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -123,13 +124,13 @@ function useModels() {
     fetchModels();
   }, []);
 
-  return { models, loading, ollamaVersion, runningModels, refresh: fetchModels };
+  return { models, loading, ollamaVersion, runningModels, setRunningModels, refresh: fetchModels };
 }
 
 export default function Home() {
   const router = useRouter();
   const { t } = useI18n();
-  const { models, loading, ollamaVersion, runningModels, refresh } = useModels();
+  const { models, loading, ollamaVersion, runningModels, setRunningModels, refresh } = useModels();
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<"name" | "size" | "date">("name");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
@@ -145,6 +146,20 @@ export default function Home() {
   const [pullProgress, setPullProgress] = useState(0);
   const [loadingModel, setLoadingModel] = useState<string | null>(null);
   const [loadProgress, setLoadProgress] = useState(0);
+  const [selectedModelNames, setSelectedModelNames] = useState<string[]>([]);
+  const [systemInfo, setSystemInfo] = useState<{
+    memory?: { totalMb: number; freeMb: number } | null;
+    gpu?: { totalMb: number; freeMb: number; source: string } | null;
+  }>({});
+
+  useEffect(() => {
+    Promise.all([
+      fetch("/api/system-info").then((r) => r.json()).catch(() => null),
+      fetch("/api/gpu").then((r) => r.json()).catch(() => null),
+    ]).then(([sys, gpu]) => {
+      setSystemInfo({ memory: sys?.memory || null, gpu: gpu?.source !== "none" ? gpu : null });
+    });
+  }, []);
 
   async function handleDelete(name: string) {
     if (!confirm(`Czy na pewno chcesz usunąć model "${name}"?`)) return;
@@ -162,12 +177,47 @@ export default function Home() {
     }
   }
 
+  function checkWarnings(model: Model) {
+    const warnings: string[] = [];
+    const sizeMb = model.size / (1024 * 1024);
+    if (systemInfo.memory && systemInfo.memory.freeMb < sizeMb) {
+      warnings.push(t.home.memoryWarning);
+    }
+    if (systemInfo.gpu && systemInfo.gpu.freeMb < sizeMb) {
+      warnings.push(t.home.vramWarning);
+    }
+    warnings.forEach((w) => toast.warning(w));
+  }
+
   async function handleLoadModel(name: string) {
+    const model = models.find((m) => m.name === name);
+    if (model) checkWarnings(model);
     setLoadingModel(name);
     setLoadProgress(0);
-    const timer = setInterval(() => {
-      setLoadProgress((p) => Math.min(p + 5, 90));
-    }, 500);
+    // real progress: poll /api/ps until model appears
+    const start = Date.now();
+    const poll = setInterval(async () => {
+      try {
+        const psRes = await fetch("/api/ps");
+        const psData = await psRes.json();
+        const loaded = (psData.models || []).map((m: { name: string }) => m.name);
+        const elapsed = Date.now() - start;
+        if (loaded.includes(name)) {
+          clearInterval(poll);
+          setLoadProgress(100);
+          toast.success(t.home.loadSuccess + ": " + name);
+          setRunningModels(loaded);
+          setTimeout(() => {
+            setLoadingModel(null);
+            setLoadProgress(0);
+          }, 600);
+        } else {
+          setLoadProgress(Math.min((elapsed / 15000) * 90, 90));
+        }
+      } catch {
+        // ignore
+      }
+    }, 800);
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
@@ -179,24 +229,19 @@ export default function Home() {
           keep_alive: "5m",
         }),
       });
-      clearInterval(timer);
-      setLoadProgress(100);
       if (!res.ok) {
+        clearInterval(poll);
         const text = await res.text();
         toast.error(t.home.loadError + ": " + text);
-      } else {
-        toast.success(t.home.loadSuccess + ": " + name);
-        await refresh();
-      }
-    } catch (e: unknown) {
-      clearInterval(timer);
-      const msg = e instanceof Error ? e.message : "Error";
-      toast.error(t.home.loadError + ": " + msg);
-    } finally {
-      setTimeout(() => {
         setLoadingModel(null);
         setLoadProgress(0);
-      }, 600);
+      }
+    } catch (e: unknown) {
+      clearInterval(poll);
+      const msg = e instanceof Error ? e.message : "Error";
+      toast.error(t.home.loadError + ": " + msg);
+      setLoadingModel(null);
+      setLoadProgress(0);
     }
   }
 
@@ -207,7 +252,7 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: name,
-          prompt: "",
+          prompt: "hi",
           stream: false,
           keep_alive: 0,
         }),
@@ -216,13 +261,24 @@ export default function Home() {
         const text = await res.text();
         toast.error(t.home.loadError + ": " + text);
       } else {
-        toast.success(t.home.unloadSuccess + ": " + name);
-        await refresh();
+        // wait a moment then refresh
+        setTimeout(async () => {
+          await refresh();
+          toast.success(t.home.unloadSuccess + ": " + name);
+        }, 800);
       }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Error";
       toast.error(t.home.loadError + ": " + msg);
     }
+  }
+
+  async function loadSelected() {
+    if (selectedModelNames.length === 0) return;
+    for (const name of selectedModelNames) {
+      await handleLoadModel(name);
+    }
+    setSelectedModelNames([]);
   }
 
   async function handlePull() {
@@ -327,6 +383,12 @@ export default function Home() {
 
   const isConnected = !!ollamaVersion;
 
+  function toggleModelSelect(name: string) {
+    setSelectedModelNames((prev) =>
+      prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]
+    );
+  }
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -334,32 +396,30 @@ export default function Home() {
           <h1 className="font-heading text-3xl font-semibold tracking-tight text-[#242424]">
             {t.home.title}
           </h1>
-          <p className="mt-1 text-base text-[#898989]">
-            {t.home.subtitle}
-          </p>
+          <p className="mt-1 text-base text-[#898989]">{t.home.subtitle}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {isConnected ? (
-            <Badge variant="secondary">Ollama {ollamaVersion}</Badge>
+            <Badge variant="secondary">{t.home.connected} {ollamaVersion}</Badge>
           ) : (
             <Badge variant="destructive" className="gap-1">
               <ServerOff className="h-3 w-3" />
-              Brak połączenia
+              {t.home.disconnected}
             </Badge>
           )}
           {runningModels.length > 0 && (
             <Badge className="bg-[#242424] text-white gap-1">
               <Activity className="h-3 w-3" />
-              {runningModels.length} załadowanych
+              {runningModels.length} {t.home.loaded}
             </Badge>
           )}
           <Button variant="outline" onClick={() => setPullOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
-            Pobierz model
+            {t.home.pullModel}
           </Button>
           <Button variant="default" onClick={refresh} disabled={loading}>
             <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-            Odśwież
+            {t.home.refresh}
           </Button>
         </div>
       </div>
@@ -368,7 +428,7 @@ export default function Home() {
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#898989]" />
           <Input
-            placeholder="Szukaj modelu..."
+            placeholder={t.home.searchPlaceholder}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-10"
@@ -378,10 +438,10 @@ export default function Home() {
           <Select value={familyFilter} onValueChange={(v) => v && setFamilyFilter(v)}>
             <SelectTrigger className="w-[180px]">
               <Cpu className="mr-2 h-4 w-4 text-[#898989]" />
-              <SelectValue placeholder="Rodzina" />
+              <SelectValue placeholder={t.home.family} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Wszystkie rodziny</SelectItem>
+              <SelectItem value="all">{t.home.allFamilies}</SelectItem>
               {families.map((f) => (
                 <SelectItem key={f} value={f}>
                   {f}
@@ -391,12 +451,12 @@ export default function Home() {
           </Select>
           <Select value={sortBy} onValueChange={(v) => v && setSortBy(v as typeof sortBy)}>
             <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder="Sortuj" />
+              <SelectValue placeholder={t.home.sort} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="name">Nazwa</SelectItem>
-              <SelectItem value="size">Rozmiar (malejąco)</SelectItem>
-              <SelectItem value="date">Data modyfikacji</SelectItem>
+              <SelectItem value="name">{t.home.sortName}</SelectItem>
+              <SelectItem value="size">{t.home.sortSize}</SelectItem>
+              <SelectItem value="date">{t.home.sortDate}</SelectItem>
             </SelectContent>
           </Select>
           <div className="flex items-center rounded-[8px] border border-[rgba(34,42,53,0.08)] bg-white shadow-[rgba(34,42,53,0.08)_0px_0px_0px_1px]">
@@ -419,6 +479,18 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      {selectedModelNames.length > 0 && (
+        <div className="mb-4 flex items-center gap-2">
+          <Button size="sm" variant="default" onClick={loadSelected} disabled={loadingModel !== null}>
+            <Cpu className="mr-2 h-4 w-4" />
+            {t.home.loadAllSelected} ({selectedModelNames.length})
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setSelectedModelNames([])}>
+            {t.tests.deselectAll}
+          </Button>
+        </div>
+      )}
 
       {loading && (
         <div className={viewMode === "grid" ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-3" : "space-y-3"}>
@@ -443,122 +515,130 @@ export default function Home() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filteredModels.map((model) => {
             const isLoaded = runningModels.includes(model.name);
+            const isSelected = selectedModelNames.includes(model.name);
             return (
-            <Card key={model.digest} className={cn("group flex flex-col transition-all hover:shadow-card-hover", isLoaded && "border-green-500 ring-1 ring-green-500")}>
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <CardTitle className="break-all text-base font-semibold flex items-center gap-2 text-[#242424]">
-                      {model.name}
-                      {isLoaded && (
-                        <Activity className="h-4 w-4 text-green-600" />
-                      )}
-                    </CardTitle>
-                    <CardDescription className="text-xs mt-1">
-                      {new Date(model.modified_at).toLocaleString("pl-PL")}
-                    </CardDescription>
-                  </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => openDetails(model)}>
-                        <Info className="mr-2 h-4 w-4" />
-                        {t.home.details}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() =>
-                          router.push(`/chat?model=${encodeURIComponent(model.name)}`)
-                        }
-                      >
-                        <MessageSquare className="mr-2 h-4 w-4" />
-                        {t.home.chat}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        className="text-red-600 focus:text-red-600"
-                        onClick={() => handleDelete(model.name)}
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        {t.home.delete}
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </CardHeader>
-              <CardContent className="flex-1">
-                <div className="flex flex-wrap gap-2 text-xs">
-                  <Badge variant="secondary">{formatBytes(model.size)}</Badge>
-                  {model.details?.parameter_size && (
-                    <Badge variant="outline">{model.details.parameter_size}</Badge>
-                  )}
-                  {model.details?.quantization_level && (
-                    <Badge variant="outline">{model.details.quantization_level}</Badge>
-                  )}
-                  {model.details?.family && (
-                    <Badge variant="outline">{model.details.family}</Badge>
-                  )}
-                  {isLoaded && (
-                    <Badge className="bg-green-600 text-white">
-                      {t.home.loadedModel}
-                    </Badge>
-                  )}
-                </div>
-              </CardContent>
-              <div className="px-6 pb-5 space-y-2">
-                <Button
-                  className="w-full"
-                  variant="secondary"
-                  onClick={() => router.push(`/chat?model=${encodeURIComponent(model.name)}`)}
-                >
-                  <MessageSquare className="mr-2 h-4 w-4" />
-                  {t.home.chooseChat}
-                </Button>
-                {loadingModel === model.name && (
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-xs text-[#898989]">
-                      <span>Loading model</span>
-                      <span>{loadProgress}%</span>
-                    </div>
-                    <Progress value={loadProgress} />
-                  </div>
+              <Card
+                key={model.digest}
+                className={cn(
+                  "group flex flex-col transition-all hover:shadow-card-hover",
+                  isLoaded && "border-green-500 ring-1 ring-green-500"
                 )}
-                <div className="flex gap-2">
-                  <Button
-                    className="flex-1"
-                    variant="outline"
-                    size="sm"
-                    disabled={loadingModel === model.name}
-                    onClick={() => handleLoadModel(model.name)}
-                  >
-                    {loadingModel === model.name ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : isLoaded ? (
-                      <Activity className="mr-2 h-4 w-4 text-green-600" />
-                    ) : (
-                      <Cpu className="mr-2 h-4 w-4" />
+              >
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={() => toggleModelSelect(model.name)}
+                        aria-label={`Select ${model.name}`}
+                      />
+                      <div>
+                        <CardTitle className="break-all text-base font-semibold flex items-center gap-2 text-[#242424]">
+                          {model.name}
+                          {isLoaded && <Activity className="h-4 w-4 text-green-600" />}
+                        </CardTitle>
+                        <CardDescription className="text-xs mt-1">
+                          {new Date(model.modified_at).toLocaleString("pl-PL")}
+                        </CardDescription>
+                      </div>
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => openDetails(model)}>
+                          <Info className="mr-2 h-4 w-4" />
+                          {t.home.details}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => router.push(`/chat?model=${encodeURIComponent(model.name)}`)}
+                        >
+                          <MessageSquare className="mr-2 h-4 w-4" />
+                          {t.home.chat}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-red-600 focus:text-red-600"
+                          onClick={() => handleDelete(model.name)}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          {t.home.delete}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </CardHeader>
+                <CardContent className="flex-1">
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    <Badge variant="secondary">{formatBytes(model.size)}</Badge>
+                    {model.details?.parameter_size && (
+                      <Badge variant="outline">{model.details.parameter_size}</Badge>
                     )}
-                    {loadingModel === model.name
-                      ? t.home.loadingModel
-                      : isLoaded
-                      ? t.home.loadedModel
-                      : t.home.loadModel}
+                    {model.details?.quantization_level && (
+                      <Badge variant="outline">{model.details.quantization_level}</Badge>
+                    )}
+                    {model.details?.family && (
+                      <Badge variant="outline">{model.details.family}</Badge>
+                    )}
+                    {isLoaded && (
+                      <Badge className="bg-green-600 text-white">{t.home.loadedModel}</Badge>
+                    )}
+                  </div>
+                </CardContent>
+                <div className="px-6 pb-5 space-y-2">
+                  <Button
+                    className="w-full"
+                    variant="secondary"
+                    onClick={() => router.push(`/chat?model=${encodeURIComponent(model.name)}`)}
+                  >
+                    <MessageSquare className="mr-2 h-4 w-4" />
+                    {t.home.chooseChat}
                   </Button>
-                  {isLoaded && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-red-600"
-                      onClick={() => handleUnloadModel(model.name)}
-                    >
-                      {t.home.unloadModel}
-                    </Button>
+                  {loadingModel === model.name && (
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs text-[#898989]">
+                        <span>{t.home.loadingModel}</span>
+                        <span>{loadProgress.toFixed(0)}%</span>
+                      </div>
+                      <Progress value={loadProgress} />
+                    </div>
                   )}
+                  <div className="flex gap-2">
+                    <Button
+                      className="flex-1"
+                      variant="outline"
+                      size="sm"
+                      disabled={loadingModel === model.name}
+                      onClick={() => handleLoadModel(model.name)}
+                    >
+                      {loadingModel === model.name ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : isLoaded ? (
+                        <Activity className="mr-2 h-4 w-4 text-green-600" />
+                      ) : (
+                        <Cpu className="mr-2 h-4 w-4" />
+                      )}
+                      {loadingModel === model.name
+                        ? t.home.loadingModel
+                        : isLoaded
+                        ? t.home.loadedModel
+                        : t.home.loadModel}
+                    </Button>
+                    {isLoaded && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-red-600"
+                        onClick={() => handleUnloadModel(model.name)}
+                      >
+                        {t.home.unloadModel}
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </Card>
+              </Card>
             );
           })}
         </div>
@@ -567,7 +647,7 @@ export default function Home() {
       {!loading && viewMode === "list" && (
         <div className="rounded-[8px] border border-[rgba(34,42,53,0.08)] bg-white shadow-card">
           <div className="grid grid-cols-12 gap-4 border-b border-[rgba(34,42,53,0.08)] bg-[#f5f5f5]/50 px-4 py-2 text-sm font-semibold text-[#898989]">
-            <div className="col-span-4">Nazwa</div>
+            <div className="col-span-4">{t.home.searchPlaceholder.replace("Szukaj ", "")}</div>
             <div className="col-span-2">Rozmiar</div>
             <div className="col-span-2">Parametry</div>
             <div className="col-span-2">Rodzina</div>
@@ -579,7 +659,18 @@ export default function Home() {
               className="grid grid-cols-12 items-center gap-4 border-b border-[rgba(34,42,53,0.08)] px-4 py-3 text-sm last:border-b-0 hover:bg-[#f5f5f5]/50 transition-colors"
             >
               <div className="col-span-4 flex items-center gap-2">
-                <span className={cn("font-medium break-all", runningModels.includes(model.name) ? "text-green-700" : "text-[#242424]")}>{model.name}</span>
+                <Checkbox
+                  checked={selectedModelNames.includes(model.name)}
+                  onCheckedChange={() => toggleModelSelect(model.name)}
+                />
+                <span
+                  className={cn(
+                    "font-medium break-all",
+                    runningModels.includes(model.name) ? "text-green-700" : "text-[#242424]"
+                  )}
+                >
+                  {model.name}
+                </span>
                 {runningModels.includes(model.name) && (
                   <Activity className="h-4 w-4 text-green-600" />
                 )}
@@ -659,9 +750,7 @@ export default function Home() {
           </div>
           <h3 className="mt-4 font-heading text-base font-semibold text-[#242424]">{t.home.noModels}</h3>
           <p className="mt-1 text-sm text-[#898989] max-w-sm">
-            {search || familyFilter !== "all"
-              ? t.home.noModelsFilter
-              : t.home.noModelsHint}
+            {search || familyFilter !== "all" ? t.home.noModelsFilter : t.home.noModelsHint}
           </p>
           {!search && familyFilter === "all" && (
             <Button className="mt-5" variant="outline" onClick={() => setPullOpen(true)}>
@@ -680,7 +769,7 @@ export default function Home() {
           </DialogHeader>
           <div className="grid gap-4 py-2">
             <div className="grid gap-2">
-              <Label htmlFor="model-name">Nazwa modelu</Label>
+              <Label htmlFor="model-name">{t.home.modelName}</Label>
               <Input
                 id="model-name"
                 value={pullName}
