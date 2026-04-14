@@ -15,6 +15,19 @@ export default function ChangelogPage() {
       <div className="mt-8 space-y-4">
         <Card>
           <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold text-[#242424]">v1.2.2</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="list-disc space-y-1 pl-5 text-sm text-[#242424]">
+              <li>Wykrywanie sytuacji, gdy Ollama wyładowuje wcześniej załadowane modele przy braku pamięci.</li>
+              <li>Dodatkowe bannery informacyjne na stronie głównej o aktualnie załadowanych modelach i zarządzaniu pamięcią.</li>
+              <li>Nowa sekcja na stronie System z wyjaśnieniem zmiennych OLLAMA_MAX_LOADED_MODELS i OLLAMA_NUM_PARALLEL.</li>
+            </ul>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
             <CardTitle className="text-base font-semibold text-[#242424]">v1.2.1</CardTitle>
           </CardHeader>
           <CardContent>
