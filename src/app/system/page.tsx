@@ -69,6 +69,7 @@ export default function SystemPage() {
   const [installed, setInstalled] = useState<InstalledModel[]>([]);
   const [loading, setLoading] = useState(true);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [gpu, setGpu] = useState<{ totalMb: number; usedMb: number; freeMb: number; source: string } | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -105,6 +106,14 @@ export default function SystemPage() {
         setInstalled(tagsData.models || []);
       } else {
         setInstalled([]);
+      }
+
+      try {
+        const gpuRes = await fetch("/api/gpu");
+        const gpuData = await gpuRes.json();
+        setGpu(gpuData);
+      } catch {
+        setGpu(null);
       }
     } catch {
       toast.error("Error fetching system data");
@@ -227,7 +236,7 @@ export default function SystemPage() {
         <StatCard
           title={t.system.vramUsed}
           value={formatBytes(totalVramSize)}
-          sub="Suma size_vram"
+          sub={gpu && gpu.source !== "none" ? `${formatBytes(gpu.freeMb * 1024 * 1024)} ${t.system.vramAvailable}` : "Suma size_vram"}
           icon={<Cpu className="h-4 w-4 text-[#898989]" />}
           loading={loading}
         />

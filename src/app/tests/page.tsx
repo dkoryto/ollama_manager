@@ -199,6 +199,7 @@ export default function TestsPage() {
   });
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [modelLoading, setModelLoading] = useState(false);
+  const [loadProgress, setLoadProgress] = useState(0);
 
   const progressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const firstTokenTimeRef = useRef<number | null>(null);
@@ -306,6 +307,10 @@ export default function TestsPage() {
       return;
     }
     setModelLoading(true);
+    setLoadProgress(0);
+    const timer = setInterval(() => {
+      setLoadProgress((p) => Math.min(p + 5, 90));
+    }, 500);
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
@@ -317,6 +322,8 @@ export default function TestsPage() {
           keep_alive: "5m",
         }),
       });
+      clearInterval(timer);
+      setLoadProgress(100);
       if (!res.ok) {
         const text = await res.text();
         toast.error(t.tests.loadError + ": " + text);
@@ -327,10 +334,42 @@ export default function TestsPage() {
         setLoadedModels((psData.models || []).map((m: { name: string }) => m.name));
       }
     } catch (e: unknown) {
+      clearInterval(timer);
       const msg = e instanceof Error ? e.message : "Error";
       toast.error(t.tests.loadError + ": " + msg);
     } finally {
-      setModelLoading(false);
+      setTimeout(() => {
+        setModelLoading(false);
+        setLoadProgress(0);
+      }, 600);
+    }
+  }
+
+  async function unloadModel() {
+    if (!selectedModel) return;
+    try {
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: selectedModel,
+          prompt: "",
+          stream: false,
+          keep_alive: 0,
+        }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        toast.error(t.tests.loadError + ": " + text);
+      } else {
+        toast.success(t.tests.unloadSuccess + ": " + selectedModel);
+        const psRes = await fetch("/api/ps");
+        const psData = await psRes.json();
+        setLoadedModels((psData.models || []).map((m: { name: string }) => m.name));
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Error";
+      toast.error(t.tests.loadError + ": " + msg);
     }
   }
 
@@ -573,6 +612,20 @@ export default function TestsPage() {
             )}
             {modelLoading ? t.tests.loading : isModelLoaded ? t.tests.loaded : t.tests.loadModel}
           </Button>
+          {isModelLoaded && (
+            <Button variant="ghost" size="sm" className="text-red-600" onClick={unloadModel}>
+              {t.tests.unloadModel || "Wyładuj"}
+            </Button>
+          )}
+          {modelLoading && (
+            <div className="w-32 space-y-1">
+              <div className="flex justify-between text-xs text-[#898989]">
+                <span>Loading</span>
+                <span>{loadProgress}%</span>
+              </div>
+              <Progress value={loadProgress} />
+            </div>
+          )}
           <Button variant="outline" size="sm" onClick={exportResults}>
             <Download className="mr-2 h-4 w-4" />
             {t.tests.export}

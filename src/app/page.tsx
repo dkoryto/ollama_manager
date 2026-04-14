@@ -144,6 +144,7 @@ export default function Home() {
   const [pullLog, setPullLog] = useState("");
   const [pullProgress, setPullProgress] = useState(0);
   const [loadingModel, setLoadingModel] = useState<string | null>(null);
+  const [loadProgress, setLoadProgress] = useState(0);
 
   async function handleDelete(name: string) {
     if (!confirm(`Czy na pewno chcesz usunąć model "${name}"?`)) return;
@@ -163,6 +164,10 @@ export default function Home() {
 
   async function handleLoadModel(name: string) {
     setLoadingModel(name);
+    setLoadProgress(0);
+    const timer = setInterval(() => {
+      setLoadProgress((p) => Math.min(p + 5, 90));
+    }, 500);
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
@@ -174,6 +179,8 @@ export default function Home() {
           keep_alive: "5m",
         }),
       });
+      clearInterval(timer);
+      setLoadProgress(100);
       if (!res.ok) {
         const text = await res.text();
         toast.error(t.home.loadError + ": " + text);
@@ -182,10 +189,39 @@ export default function Home() {
         await refresh();
       }
     } catch (e: unknown) {
+      clearInterval(timer);
       const msg = e instanceof Error ? e.message : "Error";
       toast.error(t.home.loadError + ": " + msg);
     } finally {
-      setLoadingModel(null);
+      setTimeout(() => {
+        setLoadingModel(null);
+        setLoadProgress(0);
+      }, 600);
+    }
+  }
+
+  async function handleUnloadModel(name: string) {
+    try {
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: name,
+          prompt: "",
+          stream: false,
+          keep_alive: 0,
+        }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        toast.error(t.home.loadError + ": " + text);
+      } else {
+        toast.success(t.home.unloadSuccess + ": " + name);
+        await refresh();
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Error";
+      toast.error(t.home.loadError + ": " + msg);
     }
   }
 
@@ -480,26 +516,47 @@ export default function Home() {
                   <MessageSquare className="mr-2 h-4 w-4" />
                   {t.home.chooseChat}
                 </Button>
-                <Button
-                  className="w-full"
-                  variant="outline"
-                  size="sm"
-                  disabled={loadingModel === model.name}
-                  onClick={() => handleLoadModel(model.name)}
-                >
-                  {loadingModel === model.name ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : isLoaded ? (
-                    <Activity className="mr-2 h-4 w-4 text-green-600" />
-                  ) : (
-                    <Cpu className="mr-2 h-4 w-4" />
+                {loadingModel === model.name && (
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs text-[#898989]">
+                      <span>Loading model</span>
+                      <span>{loadProgress}%</span>
+                    </div>
+                    <Progress value={loadProgress} />
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <Button
+                    className="flex-1"
+                    variant="outline"
+                    size="sm"
+                    disabled={loadingModel === model.name}
+                    onClick={() => handleLoadModel(model.name)}
+                  >
+                    {loadingModel === model.name ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : isLoaded ? (
+                      <Activity className="mr-2 h-4 w-4 text-green-600" />
+                    ) : (
+                      <Cpu className="mr-2 h-4 w-4" />
+                    )}
+                    {loadingModel === model.name
+                      ? t.home.loadingModel
+                      : isLoaded
+                      ? t.home.loadedModel
+                      : t.home.loadModel}
+                  </Button>
+                  {isLoaded && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-red-600"
+                      onClick={() => handleUnloadModel(model.name)}
+                    >
+                      {t.home.unloadModel}
+                    </Button>
                   )}
-                  {loadingModel === model.name
-                    ? t.home.loadingModel
-                    : isLoaded
-                    ? t.home.loadedModel
-                    : t.home.loadModel}
-                </Button>
+                </div>
               </div>
             </Card>
             );
@@ -570,6 +627,17 @@ export default function Home() {
                     <Cpu className="h-4 w-4" />
                   )}
                 </Button>
+                {runningModels.includes(model.name) && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-amber-600"
+                    onClick={() => handleUnloadModel(model.name)}
+                    title={t.home.unloadModel}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="icon"

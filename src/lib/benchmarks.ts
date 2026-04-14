@@ -52,4 +52,63 @@ export const benchmarks: Benchmark[] = [
     prompt: "Ile to 15 * 24? Pokaż krok po kroku obliczenia.",
     expectedKeywords: ["360"],
   },
+  {
+    id: "grammar",
+    name: "Gramatyka i stylistyka",
+    category: "Język",
+    prompt:
+      "Znajdź i popraw błędy w zdaniu: 'Meżczyzna poszedł do sklepu, żeby kupić jabłka i gruszek.'",
+    expectedKeywords: ["mężczyzna", "gruszki"],
+  },
+  {
+    id: "facts",
+    name: "Wiedza ogólna",
+    category: "Rozumienie",
+    prompt: "Wymień trzy główne składniki fotosyntezy i krótko opisz ich rolę.",
+    expectedKeywords: ["woda", "dwutlenek węgla", "światło"],
+  },
+  {
+    id: "sql",
+    name: "SQL",
+    category: "Kod",
+    prompt:
+      "Napisz zapytanie SQL, które zwraca listę użytkowników posortowaną malejąco po dacie rejestracji.",
+    expectedKeywords: ["SELECT", "FROM", "ORDER BY", "DESC"],
+  },
+  {
+    id: "ethics",
+    name: "Etyka AI",
+    category: "Rozumienie",
+    prompt:
+      "Krótko wyjaśnij, dlaczego ważne jest, aby modele AI szanowały prywatność użytkowników.",
+    expectedKeywords: ["dane", "prywatność", "zaufanie"],
+  },
+  {
+    id: "poetry",
+    name: "Poezja",
+    category: "Kreatywność",
+    prompt: "Napisz krótki, czterowierszowy wiersz o deszczu w mieście.",
+  },
+  {
+    id: "json",
+    name: "Formatowanie JSON",
+    category: "Kod",
+    prompt:
+      "Popraw i sformatuj poniższy JSON: {name: 'Anna', age: 30, hobbies: ['reading', 'cycling']}",
+    expectedKeywords: ['"name"', '"age"', '"hobbies"'],
+  },
+  {
+    id: "units",
+    name: "Konwersja jednostek",
+    category: "Logika",
+    prompt: "Ile stopni Fahrenheita to 25 stopni Celsjusza? Pokaż wzór.",
+    expectedKeywords: ["77"],
+  },
+  {
+    id: "analogy",
+    name: "Analogie",
+    category: "Logika",
+    prompt: "Uzupełnij analogię: Pióro jest do pisania, jak nożyczki są do ...",
+    expectedKeywords: ["cięcia", "krojenia"],
+  },
 ];
