@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -35,8 +35,21 @@ import {
   Languages,
   FlaskConical,
   History,
+  Activity,
 } from "lucide-react";
 import { toast } from "sonner";
+
+const LS_SELECTED_MODEL = "ollama-test-selected-model";
+const LS_RUNNING_STATE = "ollama-test-running-state";
+
+const RUNNING_INIT = "init";
+const RUNNING_GENERATE = "generate";
+const RUNNING_ERROR = "error";
+
+type RunningStatus =
+  | typeof RUNNING_INIT
+  | typeof RUNNING_GENERATE
+  | typeof RUNNING_ERROR;
 
 type ModelItem = {
   name: string;
@@ -53,6 +66,17 @@ type TestResult = {
   note: string;
   durationMs: number;
   timestamp: string;
+};
+
+type PersistedRunningState = {
+  runningId: string | null;
+  runningResponse: string;
+  runningTime: number;
+  runningProgress: number;
+  runningStatus: RunningStatus;
+  rating: number;
+  note: string;
+  interrupted?: boolean;
 };
 
 const categoryIcons: Record<string, React.ReactNode> = {
@@ -92,35 +116,149 @@ function getTimestamp() {
   return Date.now();
 }
 
+function saveRunningState(state: PersistedRunningState) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(LS_RUNNING_STATE, JSON.stringify(state));
+}
+
+function getRunningState(): PersistedRunningState | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return JSON.parse(localStorage.getItem(LS_RUNNING_STATE) || "null");
+  } catch {
+    return null;
+  }
+}
+
+function clearRunningState() {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(LS_RUNNING_STATE);
+}
+
 export default function TestsPage() {
   const settings = useSettings();
   const [models, setModels] = useState<ModelItem[]>([]);
   const [modelsLoading, setModelsLoading] = useState(true);
-  const [selectedModel, setSelectedModel] = useState<string>("");
+  const [loadedModels, setLoadedModels] = useState<string[]>([]);
+  const [selectedModel, setSelectedModel] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    return localStorage.getItem(LS_SELECTED_MODEL) || "";
+  });
   const [results, setResults] = useState<TestResult[]>(() => {
     if (typeof window === "undefined") return [];
     return getResults();
   });
-  const [runningId, setRunningId] = useState<string | null>(null);
-  const [runningResponse, setRunningResponse] = useState("");
-  const [runningTime, setRunningTime] = useState(0);
-  const [runningProgress, setRunningProgress] = useState(0);
-  const [rating, setRating] = useState(0);
-  const [note, setNote] = useState("");
+  const [runningId, setRunningId] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    const s = getRunningState();
+    return s?.runningId || null;
+  });
+  const [runningResponse, setRunningResponse] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    const s = getRunningState();
+    if (s?.interrupted) {
+      return (
+        (s.runningResponse ? s.runningResponse + "\n\n" : "") +
+        "[Test został przerwany przez odświeżenie strony. Zapisz wynik lub uruchom test ponownie.]"
+      );
+    }
+    return s?.runningResponse || "";
+  });
+  const [runningTime, setRunningTime] = useState<number>(() => {
+    if (typeof window === "undefined") return 0;
+    const s = getRunningState();
+    return s?.runningTime || 0;
+  });
+  const [runningProgress, setRunningProgress] = useState<number>(() => {
+    if (typeof window === "undefined") return 0;
+    const s = getRunningState();
+    return s?.runningProgress || 0;
+  });
+  const [runningStatus, setRunningStatus] = useState<RunningStatus | null>(() => {
+    if (typeof window === "undefined") return null;
+    const s = getRunningState();
+    if (s?.interrupted) return RUNNING_ERROR;
+    return s?.runningStatus || null;
+  });
+  const [rating, setRating] = useState<number>(() => {
+    if (typeof window === "undefined") return 0;
+    const s = getRunningState();
+    return s?.rating || 0;
+  });
+  const [note, setNote] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    const s = getRunningState();
+    return s?.note || "";
+  });
 
+  const progressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const firstTokenTimeRef = useRef<number | null>(null);
+  const startTimeRef = useRef<number>(0);
+
+  // Load models and loaded-models status
   useEffect(() => {
-    fetch("/api/tags")
-      .then((res) => res.json())
-      .then((data) => {
-        const list = (data.models || []).map((m: { name: string }) => ({ name: m.name }));
+    Promise.all([
+      fetch("/api/tags").then((res) => res.json()),
+      fetch("/api/ps").then((res) => res.json()),
+    ])
+      .then(([tagsData, psData]) => {
+        const list = (tagsData.models || []).map((m: { name: string }) => ({
+          name: m.name,
+        }));
         setModels(list);
+        setLoadedModels((psData.models || []).map((m: { name: string }) => m.name));
         setModelsLoading(false);
       })
       .catch(() => {
         setModels([]);
+        setLoadedModels([]);
         setModelsLoading(false);
       });
   }, []);
+
+  // Persist selected model
+  useEffect(() => {
+    if (typeof window !== "undefined" && selectedModel) {
+      localStorage.setItem(LS_SELECTED_MODEL, selectedModel);
+    }
+  }, [selectedModel]);
+
+  // Persist running state + beforeunload
+  useEffect(() => {
+    function handleBeforeUnload() {
+      if (runningId) {
+        saveRunningState({
+          runningId,
+          runningResponse,
+          runningTime,
+          runningProgress,
+          runningStatus: runningStatus || RUNNING_INIT,
+          rating,
+          note,
+          interrupted: true,
+        });
+      }
+    }
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [runningId, runningResponse, runningTime, runningProgress, runningStatus, rating, note]);
+
+  useEffect(() => {
+    if (!runningId) {
+      clearRunningState();
+      return;
+    }
+    saveRunningState({
+      runningId,
+      runningResponse,
+      runningTime,
+      runningProgress,
+      runningStatus: runningStatus || RUNNING_INIT,
+      rating,
+      note,
+      interrupted: false,
+    });
+  }, [runningId, runningResponse, runningTime, runningProgress, runningStatus, rating, note]);
 
   const groupedBenchmarks = useMemo(() => {
     const map: Record<string, typeof benchmarks> = {};
@@ -131,6 +269,32 @@ export default function TestsPage() {
     return map;
   }, []);
 
+  function clearProgressTimer() {
+    if (progressTimerRef.current) {
+      clearInterval(progressTimerRef.current);
+      progressTimerRef.current = null;
+    }
+  }
+
+  function startProgressTimer() {
+    clearProgressTimer();
+    startTimeRef.current = getTimestamp();
+    firstTokenTimeRef.current = null;
+    progressTimerRef.current = setInterval(() => {
+      const elapsed = getTimestamp() - startTimeRef.current;
+      setRunningTime(Math.round(elapsed));
+      if (!firstTokenTimeRef.current) {
+        // init phase: slow growth to 40% over ~20s, then creep to 55%
+        const p = Math.min((elapsed / 20000) * 40, 40) + Math.min(((elapsed - 20000) / 30000) * 15, 15);
+        setRunningProgress(Math.min(p, 55));
+      } else {
+        const sinceFirst = getTimestamp() - firstTokenTimeRef.current;
+        const p = 40 + Math.min((sinceFirst / 30000) * 55, 55);
+        setRunningProgress(Math.min(p, 95));
+      }
+    }, 500);
+  }
+
   async function runBenchmark(benchmark: (typeof benchmarks)[0]) {
     if (!selectedModel) {
       toast.error("Wybierz model przed uruchomieniem testu");
@@ -140,9 +304,10 @@ export default function TestsPage() {
     setRunningResponse("");
     setRunningTime(0);
     setRunningProgress(0);
+    setRunningStatus(RUNNING_INIT);
     setRating(0);
     setNote("");
-    const start = getTimestamp();
+    startProgressTimer();
 
     try {
       const res = await fetch("/api/generate", {
@@ -165,6 +330,9 @@ export default function TestsPage() {
       if (!res.ok || !res.body) {
         const text = await res.text();
         setRunningResponse("Błąd: " + text);
+        setRunningStatus(RUNNING_ERROR);
+        clearProgressTimer();
+        setRunningId(null);
         return;
       }
       const reader = res.body.getReader();
@@ -185,15 +353,15 @@ export default function TestsPage() {
             try {
               const obj = JSON.parse(line);
               if (obj.response) {
+                if (!firstTokenTimeRef.current) {
+                  firstTokenTimeRef.current = getTimestamp();
+                  setRunningStatus(RUNNING_GENERATE);
+                }
                 text += obj.response;
                 setRunningResponse(text);
-                const elapsed = getTimestamp() - start;
-                setRunningTime(Math.round(elapsed));
-                setRunningProgress(Math.min((elapsed / 30000) * 100, 95));
               }
               if (obj.done) {
                 done = true;
-                setRunningProgress(100);
                 break;
               }
             } catch {
@@ -202,9 +370,15 @@ export default function TestsPage() {
           }
         }
       }
+      clearProgressTimer();
+      setRunningProgress(100);
+      setRunningStatus(null);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Błąd";
       setRunningResponse("Błąd: " + msg);
+      setRunningStatus(RUNNING_ERROR);
+      clearProgressTimer();
+      setRunningId(null);
     }
   }
 
@@ -227,9 +401,23 @@ export default function TestsPage() {
     setRunningResponse("");
     setRunningTime(0);
     setRunningProgress(0);
+    setRunningStatus(null);
     setRating(0);
     setNote("");
+    clearRunningState();
     toast.success("Wynik zapisany");
+  }
+
+  function cancelRunning() {
+    clearProgressTimer();
+    setRunningId(null);
+    setRunningResponse("");
+    setRunningTime(0);
+    setRunningProgress(0);
+    setRunningStatus(null);
+    setRating(0);
+    setNote("");
+    clearRunningState();
   }
 
   function exportResults() {
@@ -257,12 +445,22 @@ export default function TestsPage() {
     );
   }, [modelResults]);
 
+  const statusText = useMemo(() => {
+    if (!runningId) return "";
+    if (runningStatus === RUNNING_INIT) return "Inicjalizowanie modelu...";
+    if (runningStatus === RUNNING_GENERATE) return "Generowanie odpowiedzi...";
+    if (runningStatus === RUNNING_ERROR) return "Wystąpił błąd";
+    return "Przetwarzanie...";
+  }, [runningId, runningStatus]);
+
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6">
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="mx-auto max-w-7xl px-4 py-8">
+      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Testy benchmarkowe</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="font-heading text-3xl font-semibold tracking-tight text-[#242424]">
+            Testy benchmarkowe
+          </h1>
+          <p className="mt-1 text-base text-[#898989]">
             Porównuj modele za pomocą presetowych zadań i zapisuj wyniki
           </p>
         </div>
@@ -275,13 +473,18 @@ export default function TestsPage() {
               onValueChange={(v) => v && setSelectedModel(v)}
               disabled={models.length === 0}
             >
-              <SelectTrigger className="w-[240px]">
+              <SelectTrigger className="w-[260px]">
                 <SelectValue placeholder="Wybierz model" />
               </SelectTrigger>
               <SelectContent>
                 {models.map((m) => (
                   <SelectItem key={m.name} value={m.name}>
-                    {m.name}
+                    <span className="flex items-center gap-2">
+                      {m.name}
+                      {loadedModels.includes(m.name) && (
+                        <Activity className="h-3 w-3 text-green-600" />
+                      )}
+                    </span>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -298,7 +501,7 @@ export default function TestsPage() {
         <div className="space-y-6 lg:col-span-2">
           {Object.entries(groupedBenchmarks).map(([category, list]) => (
             <div key={category}>
-              <h2 className="mb-3 flex items-center gap-2 text-lg font-medium">
+              <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold text-[#242424]">
                 {categoryIcons[category] || <FlaskConical className="h-4 w-4" />}
                 {category}
               </h2>
@@ -306,15 +509,15 @@ export default function TestsPage() {
                 {list.map((b) => (
                   <Card
                     key={b.id}
-                    className={`transition-shadow hover:shadow-sm ${
-                      runningId === b.id ? "border-primary ring-1" : ""
+                    className={`transition-all hover:shadow-card-hover ${
+                      runningId === b.id ? "border-[#242424] ring-1 ring-[#242424]" : ""
                     }`}
                   >
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium">{b.name}</CardTitle>
+                      <CardTitle className="text-sm font-semibold text-[#242424]">{b.name}</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <p className="mb-3 line-clamp-3 text-xs text-muted-foreground">
+                      <p className="mb-3 line-clamp-3 text-xs text-[#898989]">
                         {b.prompt}
                       </p>
                       <Button
@@ -338,22 +541,30 @@ export default function TestsPage() {
           {runningId && (
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">Wynik testu</CardTitle>
+                <CardTitle className="text-sm font-semibold text-[#242424]">Wynik testu</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <ScrollArea className="h-40 rounded-md border bg-muted/50 p-2 text-xs">
-                  <pre className="whitespace-pre-wrap">
+                <ScrollArea className="h-40 rounded-[8px] border border-[rgba(34,42,53,0.08)] bg-[#fafafa] p-2 text-xs">
+                  <pre className="whitespace-pre-wrap text-[#242424]">
                     {runningResponse || "Oczekiwanie na odpowiedź..."}
                   </pre>
                 </ScrollArea>
                 <div className="space-y-1">
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>Czas: {runningTime} ms</span>
+                  <div className="flex justify-between text-xs text-[#898989]">
+                    <span>
+                      {runningTime > 0 ? `Czas: ${runningTime} ms` : "Czas: —"}
+                    </span>
                     <span>{runningProgress.toFixed(0)}%</span>
                   </div>
-                  <Progress value={runningProgress} className="h-2" />
+                  <Progress value={runningProgress} />
+                  <div className="text-xs text-[#898989]">{statusText}</div>
                 </div>
-                {!runningResponse.startsWith("Błąd:") && runningResponse && (
+                {runningStatus === RUNNING_ERROR && (
+                  <Button size="sm" variant="outline" className="w-full" onClick={cancelRunning}>
+                    Zamknij
+                  </Button>
+                )}
+                {!runningResponse.startsWith("Błąd:") && runningResponse && runningStatus !== RUNNING_ERROR && (
                   <>
                     <div className="space-y-1">
                       <Label className="text-xs">Ocena</Label>
@@ -367,7 +578,7 @@ export default function TestsPage() {
                                   className={`rounded p-1 transition-colors ${
                                     rating >= star
                                       ? "text-amber-500"
-                                      : "text-muted-foreground/30 hover:text-muted-foreground"
+                                      : "text-[#e5e5e5] hover:text-[#898989]"
                                   }`}
                                 >
                                   <Star className="h-4 w-4 fill-current" />
@@ -382,7 +593,7 @@ export default function TestsPage() {
                     <div className="space-y-1">
                       <Label className="text-xs">Notatka</Label>
                       <input
-                        className="w-full rounded border bg-background px-2 py-1 text-xs"
+                        className="w-full rounded-[6px] border border-[rgba(34,42,53,0.08)] bg-white px-2 py-1 text-xs text-[#242424]"
                         value={note}
                         onChange={(e) => setNote(e.target.value)}
                         placeholder="Opcjonalna notatka..."
@@ -407,24 +618,24 @@ export default function TestsPage() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <CardTitle className="text-sm font-semibold text-[#242424] flex items-center gap-2">
                 <History className="h-4 w-4" />
                 Historia wyników
                 {selectedModel && (
-                  <span className="text-xs font-normal text-muted-foreground">
+                  <span className="text-xs font-normal text-[#898989]">
                     ({modelResults.length})
                   </span>
                 )}
               </CardTitle>
               {results.length > 0 && (
-                <Button variant="ghost" size="sm" className="h-7 text-destructive" onClick={() => { clearAllResults(); setResults(getResults()); }}>
+                <Button variant="ghost" size="sm" className="h-7 text-red-600" onClick={() => { clearAllResults(); setResults(getResults()); }}>
                   Wyczyść
                 </Button>
               )}
             </CardHeader>
             <CardContent>
               {selectedModel && avgDuration > 0 && (
-                <div className="mb-3 rounded-md bg-muted/50 px-3 py-2 text-xs">
+                <div className="mb-3 rounded-[8px] bg-[#f5f5f5] px-3 py-2 text-xs text-[#242424]">
                   Średni czas generowania dla <strong>{selectedModel}</strong>:{" "}
                   <span className="font-semibold">{avgDuration} ms</span>
                 </div>
@@ -432,7 +643,7 @@ export default function TestsPage() {
               <ScrollArea className="h-[calc(100vh-24rem)]">
                 <div className="space-y-3">
                   {modelResults.length === 0 && (
-                    <div className="text-xs text-muted-foreground">
+                    <div className="text-xs text-[#898989]">
                       Brak zapisanych wyników.
                     </div>
                   )}
@@ -440,13 +651,13 @@ export default function TestsPage() {
                     .slice()
                     .reverse()
                     .map((r) => (
-                      <div key={r.id} className="rounded-md border p-3 text-xs">
+                      <div key={r.id} className="rounded-[8px] border border-[rgba(34,42,53,0.08)] bg-white p-3 text-xs shadow-soft">
                         <div className="mb-1 flex items-center justify-between">
                           <Badge variant="secondary">{r.benchmarkName}</Badge>
                           <Button
                             size="icon"
                             variant="ghost"
-                            className="h-6 w-6 text-destructive"
+                            className="h-6 w-6 text-red-600"
                             onClick={() => {
                               deleteResult(r.id);
                               setResults(getResults());
@@ -455,11 +666,11 @@ export default function TestsPage() {
                             <Trash2 className="h-3 w-3" />
                           </Button>
                         </div>
-                        <div className="mb-1 text-muted-foreground">
-                          Model: <span className="font-medium">{r.model}</span> •{" "}
+                        <div className="mb-1 text-[#898989]">
+                          Model: <span className="font-medium text-[#242424]">{r.model}</span> •{" "}
                           Czas: {r.durationMs}ms
                         </div>
-                        <div className="mb-1 line-clamp-3 text-foreground/80">
+                        <div className="mb-1 line-clamp-3 text-[#242424]/80">
                           {r.response}
                         </div>
                         {r.rating > 0 && (
@@ -469,7 +680,7 @@ export default function TestsPage() {
                           </div>
                         )}
                         {r.note && (
-                          <div className="mt-1 italic text-muted-foreground">„{r.note}”</div>
+                          <div className="mt-1 italic text-[#898989]">„{r.note}”</div>
                         )}
                       </div>
                     ))}

@@ -34,11 +34,11 @@ export function SettingsPanel() {
             przeglądarce.
           </SheetDescription>
         </SheetHeader>
-        <div className="flex-1 space-y-6 overflow-y-auto p-4">
+        <div className="flex-1 space-y-6 overflow-y-auto p-5">
           <div className="space-y-2">
             <div className="flex justify-between">
               <Label>Temperature</Label>
-              <span className="text-sm text-zinc-500">{options.temperature}</span>
+              <span className="text-sm text-[#898989] font-medium">{options.temperature}</span>
             </div>
             <Slider
               value={[options.temperature]}
@@ -47,7 +47,7 @@ export function SettingsPanel() {
               max={2}
               step={0.1}
             />
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-[#898989]">
               Niższa wartość = bardziej przewidywalne odpowiedzi.
             </p>
           </div>
@@ -55,7 +55,7 @@ export function SettingsPanel() {
           <div className="space-y-2">
             <div className="flex justify-between">
               <Label>Top P</Label>
-              <span className="text-sm text-zinc-500">{options.top_p}</span>
+              <span className="text-sm text-[#898989] font-medium">{options.top_p}</span>
             </div>
             <Slider
               value={[options.top_p]}
@@ -69,7 +69,7 @@ export function SettingsPanel() {
           <div className="space-y-2">
             <div className="flex justify-between">
               <Label>Top K</Label>
-              <span className="text-sm text-zinc-500">{options.top_k}</span>
+              <span className="text-sm text-[#898989] font-medium">{options.top_k}</span>
             </div>
             <Slider
               value={[options.top_k]}
@@ -115,7 +115,7 @@ export function SettingsPanel() {
               placeholder="Wpisz domyślny system prompt..."
               rows={4}
             />
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-[#898989]">
               Zostanie dołączony do każdej rozmowy (o ile model go wspiera).
             </p>
           </div>

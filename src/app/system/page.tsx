@@ -137,16 +137,18 @@ export default function SystemPage() {
   );
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6">
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="mx-auto max-w-7xl px-4 py-8">
+      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Monitorowanie systemu</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="font-heading text-3xl font-semibold tracking-tight text-[#242424]">
+            Monitorowanie systemu
+          </h1>
+          <p className="mt-1 text-base text-[#898989]">
             Status Ollamy, modele i parametry środowiska
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 text-sm">
+          <div className="flex items-center gap-2 text-sm text-[#242424]">
             <Switch
               id="auto-refresh"
               checked={autoRefresh}
@@ -163,10 +165,9 @@ export default function SystemPage() {
         </div>
       </div>
 
-      {/* Connection Status */}
       <Card className="mb-6">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base font-medium">Status połączenia z Ollamą</CardTitle>
+          <CardTitle className="text-base font-semibold text-[#242424]">Status połączenia z Ollamą</CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -183,17 +184,17 @@ export default function SystemPage() {
               <AlertTitle>Brak połączenia</AlertTitle>
               <AlertDescription>
                 {versionError}. Sprawdź czy Ollama działa i czy adres{" "}
-                <code className="rounded bg-destructive/20 px-1 py-0.5">OLLAMA_HOST</code>{" "}
+                <code className="rounded bg-red-100 px-1 py-0.5">OLLAMA_HOST</code>{" "}
                 jest poprawny.
               </AlertDescription>
             </Alert>
           ) : (
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <div className="flex items-center gap-2">
-                <div className="rounded-full bg-green-100 p-2 dark:bg-green-900">
-                  <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-100" />
+                <div className="rounded-full bg-[#f5f5f5] p-2">
+                  <CheckCircle2 className="h-5 w-5 text-green-600" />
                 </div>
-                <span className="font-medium">Połączenie aktywne</span>
+                <span className="font-semibold text-[#242424]">Połączenie aktywne</span>
               </div>
               {version && (
                 <Badge variant="secondary">Wersja Ollamy: {version.version}</Badge>
@@ -206,42 +207,40 @@ export default function SystemPage() {
         </CardContent>
       </Card>
 
-      {/* Stats Grid */}
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="Zainstalowane modele"
           value={installed.length.toString()}
           sub={formatBytes(totalInstalledSize) + " na dysku"}
-          icon={<Database className="h-4 w-4 text-muted-foreground" />}
+          icon={<Database className="h-4 w-4 text-[#898989]" />}
           loading={loading}
         />
         <StatCard
           title="Załadowane modele"
           value={running.length.toString()}
           sub={formatBytes(totalRunningSize) + " w pamięci"}
-          icon={<Activity className="h-4 w-4 text-muted-foreground" />}
+          icon={<Activity className="h-4 w-4 text-[#898989]" />}
           loading={loading}
         />
         <StatCard
           title="VRAM używana"
           value={formatBytes(totalVramSize)}
           sub="Suma size_vram"
-          icon={<Cpu className="h-4 w-4 text-muted-foreground" />}
+          icon={<Cpu className="h-4 w-4 text-[#898989]" />}
           loading={loading}
         />
         <StatCard
           title="Context size"
           value={settings.options.num_ctx.toLocaleString("pl-PL")}
           sub="Globalne ustawienie num_ctx"
-          icon={<Server className="h-4 w-4 text-muted-foreground" />}
+          icon={<Server className="h-4 w-4 text-[#898989]" />}
           loading={loading}
         />
       </div>
 
-      {/* Running Models Table */}
       <Card className="mb-6">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base font-medium">Załadowane modele (szczegóły)</CardTitle>
+          <CardTitle className="text-base font-semibold text-[#242424]">Załadowane modele (szczegóły)</CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -251,11 +250,11 @@ export default function SystemPage() {
               <Skeleton className="h-8 w-full" />
             </div>
           ) : running.length === 0 ? (
-            <div className="text-sm text-muted-foreground">
+            <div className="text-sm text-[#898989]">
               Brak aktualnie załadowanych modeli w pamięci.
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-md border">
+            <div className="overflow-x-auto rounded-[8px] border border-[rgba(34,42,53,0.08)]">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -277,7 +276,7 @@ export default function SystemPage() {
                           ? new Date(m.expires_at).toLocaleString("pl-PL")
                           : "—"}
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
+                      <TableCell className="text-xs text-[#898989]">
                         {m.digest.slice(0, 16)}…
                       </TableCell>
                     </TableRow>
@@ -289,11 +288,10 @@ export default function SystemPage() {
         </CardContent>
       </Card>
 
-      {/* Global Settings */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-3">
-          <CardTitle className="text-base font-medium">Globalne ustawienia generowania</CardTitle>
-          <Settings2 className="h-4 w-4 text-muted-foreground" />
+          <CardTitle className="text-base font-semibold text-[#242424]">Globalne ustawienia generowania</CardTitle>
+          <Settings2 className="h-4 w-4 text-[#898989]" />
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -337,7 +335,7 @@ function StatCard({
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+        <CardTitle className="text-sm font-semibold text-[#242424]">{title}</CardTitle>
         {icon}
       </CardHeader>
       <CardContent>
@@ -348,8 +346,8 @@ function StatCard({
           </>
         ) : (
           <>
-            <div className="text-2xl font-bold">{value}</div>
-            <p className="text-xs text-muted-foreground">{sub}</p>
+            <div className="text-2xl font-bold text-[#242424]">{value}</div>
+            <p className="text-xs text-[#898989]">{sub}</p>
           </>
         )}
       </CardContent>
@@ -369,12 +367,12 @@ function SettingTile({
   truncate?: boolean;
 }) {
   return (
-    <div className="rounded-lg border p-3">
-      <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground">
+    <div className="rounded-[8px] border border-[rgba(34,42,53,0.08)] bg-white p-3 shadow-soft">
+      <div className="mb-1 flex items-center gap-2 text-xs text-[#898989]">
         {icon}
         {label}
       </div>
-      <div className={`text-lg font-semibold ${truncate ? "truncate" : ""}`}>{value}</div>
+      <div className={`text-lg font-semibold text-[#242424] ${truncate ? "truncate" : ""}`}>{value}</div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -43,6 +44,8 @@ import {
   MessageSquare,
   Copy,
   Check,
+  PanelRight,
+  PanelRightClose,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -75,11 +78,11 @@ export default function ChatPage() {
     seed: globalSettings.options.seed,
   });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [wideMode, setWideMode] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const activeSession = sessions.find((s) => s.id === activeId) || null;
 
-  // Load models and sessions
   useEffect(() => {
     fetch("/api/tags")
       .then((res) => res.json())
@@ -92,23 +95,27 @@ export default function ChatPage() {
     const stored = getChatSessions();
     setSessions(stored);
 
-    // Load model from query param
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const m = params.get("model");
       if (m) {
-        const session = createChatSession(m);
-        const next = [session, ...stored];
-        saveChatSessions(next);
-        setSessions(next);
-        setActiveId(session.id);
+        const existing = stored.find((s) => s.model === m && s.messages.length === 0);
+        if (existing) {
+          setActiveId(existing.id);
+        } else {
+          const session = createChatSession(m);
+          const next = [session, ...stored];
+          saveChatSessions(next);
+          setSessions(next);
+          setActiveId(session.id);
+        }
+        window.history.replaceState({}, "", "/chat");
       } else if (stored.length > 0) {
         setActiveId(stored[0].id);
       }
     }
   }, []);
 
-  // Sync global settings
   useEffect(() => {
     setOptions({
       temperature: globalSettings.options.temperature,
@@ -120,7 +127,6 @@ export default function ChatPage() {
     setSystemPrompt(globalSettings.options.system || "");
   }, [globalSettings.options]);
 
-  // Auto-scroll
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -263,15 +269,15 @@ export default function ChatPage() {
   function SidebarContent() {
     return (
       <div className="flex h-full flex-col">
-        <div className="flex items-center justify-between border-b p-3">
-          <span className="text-sm font-medium">Konwersacje</span>
+        <div className="flex items-center justify-between border-b border-[rgba(34,42,53,0.08)] p-3">
+          <span className="text-sm font-semibold text-[#242424]">Konwersacje</span>
           <Button size="icon" variant="ghost" onClick={() => handleNewChat()}>
             <Plus className="h-4 w-4" />
           </Button>
         </div>
         <div className="flex-1 overflow-auto p-2">
           {sessions.length === 0 && (
-            <div className="px-2 py-6 text-center text-xs text-muted-foreground">
+            <div className="px-2 py-6 text-center text-xs text-[#898989]">
               Brak zapisanych chatów.
             </div>
           )}
@@ -283,16 +289,16 @@ export default function ChatPage() {
                   setActiveId(session.id);
                   setMobileMenuOpen(false);
                 }}
-                className={`group flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors ${
+                className={`group flex w-full items-center gap-2 rounded-[8px] px-2 py-2 text-left text-sm transition-colors ${
                   activeId === session.id
-                    ? "bg-accent text-accent-foreground"
-                    : "hover:bg-muted"
+                    ? "bg-[#f5f5f5] text-[#242424] font-semibold"
+                    : "text-[#111111] hover:bg-[#f5f5f5]/80"
                 }`}
               >
-                <MessageSquare className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <MessageSquare className="h-4 w-4 shrink-0 text-[#898989]" />
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-medium">{session.title}</div>
-                  <div className="truncate text-xs text-muted-foreground">
+                  <div className="truncate text-xs text-[#898989]">
                     {session.model}
                   </div>
                 </div>
@@ -303,7 +309,7 @@ export default function ChatPage() {
                     handleDeleteSession(session.id);
                   }}
                 >
-                  <Trash2 className="h-4 w-4 text-destructive" />
+                  <Trash2 className="h-4 w-4 text-red-600" />
                 </div>
               </button>
             ))}
@@ -315,12 +321,10 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden">
-      {/* Desktop sidebar */}
-      <aside className="hidden w-64 flex-col border-r bg-muted/30 md:flex">
+      <aside className="hidden w-64 flex-col border-r border-[rgba(34,42,53,0.08)] bg-white md:flex">
         <SidebarContent />
       </aside>
 
-      {/* Mobile menu */}
       <div className="absolute left-2 top-2 z-10 md:hidden">
         <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
           <SheetTrigger>
@@ -334,12 +338,10 @@ export default function ChatPage() {
         </Sheet>
       </div>
 
-      {/* Main */}
-      <div className="flex flex-1 flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between gap-3 border-b bg-background px-4 py-3">
+      <div className={cn("flex flex-col", wideMode ? "flex-1" : "max-w-4xl w-full mx-auto border-x border-[rgba(34,42,53,0.08)] bg-white")}>
+        <div className="flex items-center justify-between gap-3 border-b border-[rgba(34,42,53,0.08)] bg-white px-4 py-3">
           <div className="flex items-center gap-2 md:ml-0 ml-12">
-            <Bot className="h-5 w-5 text-muted-foreground" />
+            <Bot className="h-5 w-5 text-[#898989]" />
             <Select
               value={activeSession?.model || undefined}
               onValueChange={(v) => {
@@ -362,7 +364,7 @@ export default function ChatPage() {
               </SelectContent>
             </Select>
             {avgRating !== null && (
-              <span className="hidden text-sm text-muted-foreground sm:inline">
+              <span className="hidden text-sm text-[#898989] sm:inline">
                 Średnia ocena: <strong>{avgRating}</strong>/5
               </span>
             )}
@@ -381,6 +383,21 @@ export default function ChatPage() {
             <Button
               variant="outline"
               size="sm"
+              onClick={() => setWideMode((w) => !w)}
+              title={wideMode ? "Zwęż widok" : "Rozszerz widok"}
+            >
+              {wideMode ? (
+                <PanelRightClose className="mr-2 h-4 w-4" />
+              ) : (
+                <PanelRight className="mr-2 h-4 w-4" />
+              )}
+              <span className="hidden sm:inline">
+                {wideMode ? "Zwęż" : "Rozszerz"}
+              </span>
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
               onClick={() => activeSession && handleNewChat(activeSession.model)}
             >
               <Plus className="mr-2 h-4 w-4" />
@@ -390,7 +407,7 @@ export default function ChatPage() {
         </div>
 
         {showSettings && (
-          <div className="grid gap-4 border-b bg-background p-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 border-b border-[rgba(34,42,53,0.08)] bg-white p-4 sm:grid-cols-2 lg:grid-cols-3">
             <div className="space-y-2">
               <Label>Temperature: {options.temperature}</Label>
               <Slider
@@ -469,22 +486,21 @@ export default function ChatPage() {
         )}
 
         {!activeSession?.model && (
-          <div className="mx-4 mt-4 rounded-md border bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+          <div className="mx-4 mt-4 rounded-[8px] border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
             Wybierz model z listy, aby rozpocząć rozmowę.
           </div>
         )}
 
-        {/* Messages */}
-        <div className="flex-1 overflow-hidden bg-muted/20">
+        <div className="flex-1 overflow-hidden bg-[#fafafa]">
           <ScrollArea className="h-full px-4 py-4">
             <div className="mx-auto max-w-3xl space-y-5">
               {!activeSession && (
-                <div className="py-10 text-center text-muted-foreground">
+                <div className="py-10 text-center text-[#898989]">
                   Wybierz lub utwórz nowy chat.
                 </div>
               )}
               {activeSession?.messages.length === 0 && (
-                <div className="py-10 text-center text-sm text-muted-foreground">
+                <div className="py-10 text-center text-sm text-[#898989]">
                   Rozpocznij rozmowę wpisując wiadomość poniżej.
                 </div>
               )}
@@ -496,15 +512,15 @@ export default function ChatPage() {
                     }`}
                   >
                     {msg.role === "assistant" && (
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
-                        <Bot className="h-4 w-4" />
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f5f5f5]">
+                        <Bot className="h-4 w-4 text-[#242424]" />
                       </div>
                     )}
                     <div
                       className={`relative max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
                         msg.role === "user"
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-card text-card-foreground border shadow-sm"
+                          ? "bg-[#242424] text-white"
+                          : "bg-white text-[#242424] border border-[rgba(34,42,53,0.08)] shadow-soft"
                       }`}
                     >
                       {msg.content || (
@@ -515,15 +531,15 @@ export default function ChatPage() {
                       )}
                     </div>
                     {msg.role === "user" && (
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#242424] text-white">
                         <User className="h-4 w-4" />
                       </div>
                     )}
                   </div>
                   {msg.role === "assistant" && msg.content && !streaming && (
                     <div className="mt-1 flex gap-3 justify-start pl-11">
-                      <div className="max-w-[85%] rounded-xl bg-card px-3 py-1.5 text-xs shadow-sm border">
-                        <div className="mb-1 text-muted-foreground">Oceń odpowiedź:</div>
+                      <div className="max-w-[85%] rounded-xl bg-white px-3 py-1.5 text-xs shadow-soft border border-[rgba(34,42,53,0.08)]">
+                        <div className="mb-1 text-[#898989]">Oceń odpowiedź:</div>
                         <div className="flex gap-1">
                           {[1, 2, 3, 4, 5].map((star) => (
                             <Tooltip key={star}>
@@ -534,7 +550,7 @@ export default function ChatPage() {
                                     className={`rounded p-1 transition-colors ${
                                       (msg.rating || 0) >= star
                                         ? "text-amber-500"
-                                        : "text-muted-foreground/30 hover:text-muted-foreground"
+                                        : "text-[#e5e5e5] hover:text-[#898989]"
                                     }`}
                                   >
                                     <Star className="h-4 w-4 fill-current" />
@@ -555,8 +571,7 @@ export default function ChatPage() {
           </ScrollArea>
         </div>
 
-        {/* Input */}
-        <div className="border-t bg-background p-4">
+        <div className="border-t border-[rgba(34,42,53,0.08)] bg-white p-4">
           <div className="mx-auto flex max-w-3xl gap-2">
             <Textarea
               value={input}
@@ -597,7 +612,7 @@ function CopyButton({ text }: { text: string }) {
         setTimeout(() => setCopied(false), 2000);
         toast.success("Skopiowano do schowka");
       }}
-      className="absolute -bottom-2 -right-2 rounded-full border bg-background p-1 text-muted-foreground shadow-sm hover:text-foreground"
+      className="absolute -bottom-2 -right-2 rounded-full border border-[rgba(34,42,53,0.08)] bg-white p-1 text-[#898989] shadow-soft hover:text-[#242424]"
       title="Kopiuj"
     >
       {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}

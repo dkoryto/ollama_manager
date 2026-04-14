@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -123,6 +124,7 @@ function useModels() {
 }
 
 export default function Home() {
+  const router = useRouter();
   const { models, loading, ollamaVersion, runningModels, refresh } = useModels();
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<"name" | "size" | "date">("name");
@@ -132,7 +134,6 @@ export default function Home() {
   const [modelDetails, setModelDetails] = useState<ModelDetails | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
-
   const [pullOpen, setPullOpen] = useState(false);
   const [pullName, setPullName] = useState("");
   const [pulling, setPulling] = useState(false);
@@ -252,12 +253,13 @@ export default function Home() {
   const isConnected = !!ollamaVersion;
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6">
-      {/* Header */}
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="mx-auto max-w-7xl px-4 py-8">
+      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Modele lokalne</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="font-heading text-3xl font-semibold tracking-tight text-[#242424]">
+            Modele lokalne
+          </h1>
+          <p className="mt-1 text-base text-[#898989]">
             Zarządzaj i testuj modele dostępne przez Ollama
           </p>
         </div>
@@ -271,7 +273,7 @@ export default function Home() {
             </Badge>
           )}
           {runningModels.length > 0 && (
-            <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-100 gap-1">
+            <Badge className="bg-[#242424] text-white gap-1">
               <Activity className="h-3 w-3" />
               {runningModels.length} załadowanych
             </Badge>
@@ -280,28 +282,27 @@ export default function Home() {
             <Plus className="mr-2 h-4 w-4" />
             Pobierz model
           </Button>
-          <Button variant="outline" onClick={refresh} disabled={loading}>
+          <Button variant="default" onClick={refresh} disabled={loading}>
             <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             Odśwież
           </Button>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#898989]" />
           <Input
             placeholder="Szukaj modelu..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
+            className="pl-10"
           />
         </div>
         <div className="flex items-center gap-2">
           <Select value={familyFilter} onValueChange={(v) => v && setFamilyFilter(v)}>
             <SelectTrigger className="w-[180px]">
-              <Cpu className="mr-2 h-4 w-4 text-muted-foreground" />
+              <Cpu className="mr-2 h-4 w-4 text-[#898989]" />
               <SelectValue placeholder="Rodzina" />
             </SelectTrigger>
             <SelectContent>
@@ -323,11 +324,11 @@ export default function Home() {
               <SelectItem value="date">Data modyfikacji</SelectItem>
             </SelectContent>
           </Select>
-          <div className="flex items-center rounded-md border">
+          <div className="flex items-center rounded-[8px] border border-[rgba(34,42,53,0.08)] bg-white shadow-[rgba(34,42,53,0.08)_0px_0px_0px_1px]">
             <Button
               variant={viewMode === "grid" ? "secondary" : "ghost"}
               size="icon"
-              className="rounded-none rounded-l-md"
+              className="rounded-none rounded-l-[8px]"
               onClick={() => setViewMode("grid")}
             >
               <LayoutGrid className="h-4 w-4" />
@@ -335,7 +336,7 @@ export default function Home() {
             <Button
               variant={viewMode === "list" ? "secondary" : "ghost"}
               size="icon"
-              className="rounded-none rounded-r-md"
+              className="rounded-none rounded-r-[8px]"
               onClick={() => setViewMode("list")}
             >
               <List className="h-4 w-4" />
@@ -344,7 +345,6 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Loading */}
       {loading && (
         <div className={viewMode === "grid" ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-3" : "space-y-3"}>
           {Array.from({ length: 6 }).map((_, i) => (
@@ -364,15 +364,14 @@ export default function Home() {
         </div>
       )}
 
-      {/* Grid View */}
       {!loading && viewMode === "grid" && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filteredModels.map((model) => (
-            <Card key={model.digest} className="group flex flex-col transition-shadow hover:shadow-md">
+            <Card key={model.digest} className="group flex flex-col transition-all hover:shadow-card-hover">
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <CardTitle className="break-all text-base font-semibold flex items-center gap-2">
+                    <CardTitle className="break-all text-base font-semibold flex items-center gap-2 text-[#242424]">
                       {model.name}
                       {runningModels.includes(model.name) && (
                         <Activity className="h-4 w-4 text-green-600" />
@@ -393,14 +392,16 @@ export default function Home() {
                         <Info className="mr-2 h-4 w-4" />
                         Szczegóły
                       </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link href={`/chat?model=${encodeURIComponent(model.name)}`}>
-                          <MessageSquare className="mr-2 h-4 w-4" />
-                          Chat
-                        </Link>
+                      <DropdownMenuItem
+                        onClick={() =>
+                          router.push(`/chat?model=${encodeURIComponent(model.name)}`)
+                        }
+                      >
+                        <MessageSquare className="mr-2 h-4 w-4" />
+                        Chat
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        className="text-destructive focus:text-destructive"
+                        className="text-red-600 focus:text-red-600"
                         onClick={() => handleDelete(model.name)}
                       >
                         <Trash2 className="mr-2 h-4 w-4" />
@@ -423,33 +424,31 @@ export default function Home() {
                     <Badge variant="outline">{model.details.family}</Badge>
                   )}
                   {runningModels.includes(model.name) && (
-                    <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-100">
+                    <Badge className="bg-[#242424] text-white">
                       Załadowany
                     </Badge>
                   )}
                 </div>
               </CardContent>
-              <div className="px-6 pb-4">
-                <Button
-                  className="w-full"
-                  variant="secondary"
-                  render={
-                    <Link href={`/chat?model=${encodeURIComponent(model.name)}`} />
-                  }
+              <div className="px-6 pb-5">
+                <Link
+                  href={`/chat?model=${encodeURIComponent(model.name)}`}
+                  className="block w-full"
                 >
-                  <MessageSquare className="mr-2 h-4 w-4" />
-                  Wybierz do chatu
-                </Button>
+                  <Button className="w-full" variant="secondary">
+                    <MessageSquare className="mr-2 h-4 w-4" />
+                    Wybierz do chatu
+                  </Button>
+                </Link>
               </div>
             </Card>
           ))}
         </div>
       )}
 
-      {/* List View */}
       {!loading && viewMode === "list" && (
-        <div className="rounded-md border">
-          <div className="grid grid-cols-12 gap-4 border-b bg-muted/50 px-4 py-2 text-sm font-medium text-muted-foreground">
+        <div className="rounded-[8px] border border-[rgba(34,42,53,0.08)] bg-white shadow-card">
+          <div className="grid grid-cols-12 gap-4 border-b border-[rgba(34,42,53,0.08)] bg-[#f5f5f5]/50 px-4 py-2 text-sm font-semibold text-[#898989]">
             <div className="col-span-4">Nazwa</div>
             <div className="col-span-2">Rozmiar</div>
             <div className="col-span-2">Parametry</div>
@@ -459,15 +458,15 @@ export default function Home() {
           {filteredModels.map((model) => (
             <div
               key={model.digest}
-              className="grid grid-cols-12 items-center gap-4 border-b px-4 py-3 text-sm last:border-b-0 hover:bg-muted/30 transition-colors"
+              className="grid grid-cols-12 items-center gap-4 border-b border-[rgba(34,42,53,0.08)] px-4 py-3 text-sm last:border-b-0 hover:bg-[#f5f5f5]/50 transition-colors"
             >
               <div className="col-span-4 flex items-center gap-2">
-                <span className="font-medium break-all">{model.name}</span>
+                <span className="font-medium text-[#242424] break-all">{model.name}</span>
                 {runningModels.includes(model.name) && (
                   <Activity className="h-4 w-4 text-green-600" />
                 )}
               </div>
-              <div className="col-span-2 text-muted-foreground">{formatBytes(model.size)}</div>
+              <div className="col-span-2 text-[#898989]">{formatBytes(model.size)}</div>
               <div className="col-span-2">
                 {model.details?.parameter_size ? (
                   <Badge variant="outline">{model.details.parameter_size}</Badge>
@@ -486,18 +485,15 @@ export default function Home() {
                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openDetails(model)}>
                   <Info className="h-4 w-4" />
                 </Button>
+                <Link href={`/chat?model=${encodeURIComponent(model.name)}`}>
+                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <MessageSquare className="h-4 w-4" />
+                  </Button>
+                </Link>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8"
-                  render={<Link href={`/chat?model=${encodeURIComponent(model.name)}`} />}
-                >
-                  <MessageSquare className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-destructive"
+                  className="h-8 w-8 text-red-600"
                   onClick={() => handleDelete(model.name)}
                 >
                   <Trash2 className="h-4 w-4" />
@@ -508,20 +504,19 @@ export default function Home() {
         </div>
       )}
 
-      {/* Empty state */}
       {!loading && filteredModels.length === 0 && (
-        <div className="mt-10 flex flex-col items-center justify-center rounded-lg border border-dashed p-10 text-center">
-          <div className="rounded-full bg-muted p-3">
-            <Cpu className="h-6 w-6 text-muted-foreground" />
+        <div className="mt-12 flex flex-col items-center justify-center rounded-[12px] border border-dashed border-[rgba(34,42,53,0.15)] p-12 text-center">
+          <div className="rounded-full bg-[#f5f5f5] p-4">
+            <Cpu className="h-6 w-6 text-[#898989]" />
           </div>
-          <h3 className="mt-4 text-sm font-medium">Brak modeli</h3>
-          <p className="mt-1 text-sm text-muted-foreground max-w-sm">
+          <h3 className="mt-4 font-heading text-base font-semibold text-[#242424]">Brak modeli</h3>
+          <p className="mt-1 text-sm text-[#898989] max-w-sm">
             {search || familyFilter !== "all"
               ? "Spróbuj zmienić filtry wyszukiwania."
               : "Upewnij się, że Ollama działa i jest dostępna pod zdefiniowanym adresem."}
           </p>
           {!search && familyFilter === "all" && (
-            <Button className="mt-4" variant="outline" onClick={() => setPullOpen(true)}>
+            <Button className="mt-5" variant="outline" onClick={() => setPullOpen(true)}>
               <Download className="mr-2 h-4 w-4" />
               Pobierz pierwszy model
             </Button>
@@ -529,7 +524,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* Pull Dialog */}
       <Dialog open={pullOpen} onOpenChange={setPullOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -549,7 +543,7 @@ export default function Home() {
                 disabled={pulling}
               />
             </div>
-            <ScrollArea className="h-40 rounded-md border bg-black p-3 text-xs text-green-400">
+            <ScrollArea className="h-40 rounded-[8px] border border-[rgba(34,42,53,0.08)] bg-black p-3 text-xs text-green-400">
               <pre className="whitespace-pre-wrap">
                 {pullLog || "Oczekiwanie na start..."}
               </pre>
@@ -563,7 +557,6 @@ export default function Home() {
         </DialogContent>
       </Dialog>
 
-      {/* Details Dialog */}
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
@@ -571,49 +564,49 @@ export default function Home() {
             <DialogDescription>{selectedModel?.name}</DialogDescription>
           </DialogHeader>
           {detailsLoading ? (
-            <div className="py-6 text-sm text-muted-foreground">Ładowanie szczegółów...</div>
+            <div className="py-6 text-sm text-[#898989]">Ładowanie szczegółów...</div>
           ) : (
             <ScrollArea className="max-h-[60vh]">
               <div className="space-y-4 pr-4 text-sm">
                 {modelDetails?.error && (
-                  <div className="text-destructive">{modelDetails.error}</div>
+                  <div className="text-red-600">{modelDetails.error}</div>
                 )}
                 {modelDetails?.license && (
                   <div>
-                    <div className="font-medium text-muted-foreground">Licencja</div>
-                    <pre className="mt-1 max-h-32 overflow-auto rounded bg-muted p-2 text-xs">
+                    <div className="font-medium text-[#242424]">Licencja</div>
+                    <pre className="mt-1 max-h-32 overflow-auto rounded-[8px] bg-[#f5f5f5] p-2 text-xs whitespace-pre-wrap break-all">
                       {modelDetails.license}
                     </pre>
                   </div>
                 )}
                 {modelDetails?.modelfile && (
                   <div>
-                    <div className="font-medium text-muted-foreground">Modelfile</div>
-                    <pre className="mt-1 max-h-32 overflow-auto rounded bg-muted p-2 text-xs">
+                    <div className="font-medium text-[#242424]">Modelfile</div>
+                    <pre className="mt-1 max-h-32 overflow-auto rounded-[8px] bg-[#f5f5f5] p-2 text-xs whitespace-pre-wrap break-all">
                       {modelDetails.modelfile}
                     </pre>
                   </div>
                 )}
                 {modelDetails?.parameters && (
                   <div>
-                    <div className="font-medium text-muted-foreground">Parametry</div>
-                    <pre className="mt-1 max-h-32 overflow-auto rounded bg-muted p-2 text-xs">
+                    <div className="font-medium text-[#242424]">Parametry</div>
+                    <pre className="mt-1 max-h-32 overflow-auto rounded-[8px] bg-[#f5f5f5] p-2 text-xs whitespace-pre-wrap break-all">
                       {modelDetails.parameters}
                     </pre>
                   </div>
                 )}
                 {modelDetails?.system && (
                   <div>
-                    <div className="font-medium text-muted-foreground">System prompt</div>
-                    <pre className="mt-1 max-h-32 overflow-auto rounded bg-muted p-2 text-xs">
+                    <div className="font-medium text-[#242424]">System prompt</div>
+                    <pre className="mt-1 max-h-32 overflow-auto rounded-[8px] bg-[#f5f5f5] p-2 text-xs whitespace-pre-wrap break-all">
                       {modelDetails.system}
                     </pre>
                   </div>
                 )}
                 {modelDetails?.template && (
                   <div>
-                    <div className="font-medium text-muted-foreground">Szablon</div>
-                    <pre className="mt-1 max-h-32 overflow-auto rounded bg-muted p-2 text-xs">
+                    <div className="font-medium text-[#242424]">Szablon</div>
+                    <pre className="mt-1 max-h-32 overflow-auto rounded-[8px] bg-[#f5f5f5] p-2 text-xs whitespace-pre-wrap break-all">
                       {modelDetails.template}
                     </pre>
                   </div>
@@ -624,7 +617,7 @@ export default function Home() {
                   !modelDetails?.parameters &&
                   !modelDetails?.system &&
                   !modelDetails?.template && (
-                    <div className="text-muted-foreground">Brak dodatkowych szczegółów.</div>
+                    <div className="text-[#898989]">Brak dodatkowych szczegółów.</div>
                   )}
               </div>
             </ScrollArea>
