@@ -194,6 +194,7 @@ export default function Home() {
     if (model) checkWarnings(model);
     setLoadingModel(name);
     setLoadProgress(0);
+    const previouslyLoaded = new Set(runningModels);
     // real progress: poll /api/ps until model appears
     const start = Date.now();
     const poll = setInterval(async () => {
@@ -207,6 +208,10 @@ export default function Home() {
           setLoadProgress(100);
           toast.success(t.home.loadSuccess + ": " + name);
           setRunningModels(loaded);
+          const unloaded = Array.from(previouslyLoaded).filter((n) => n !== name && !loaded.includes(n));
+          if (unloaded.length > 0) {
+            toast.warning(`Ollama wyładowała modele: ${unloaded.join(", ")}. Sprawdź dostępną pamięć lub ustaw OLLAMA_MAX_LOADED_MODELS.`);
+          }
           setTimeout(() => {
             setLoadingModel(null);
             setLoadProgress(0);
@@ -495,6 +500,15 @@ export default function Home() {
       <div className="mb-4 rounded-[8px] border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
         {t.home.ollamaMemoryNote}
       </div>
+
+      {runningModels.length > 0 && (
+        <div className="mb-4 rounded-[8px] border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          {runningModels.length > 1
+            ? `Załadowane modele: ${runningModels.join(", ")}.`
+            : `Załadowany model: ${runningModels[0]}.`}{" "}
+          Ollama może wyładować modele przy braku pamięci — sprawdź stronę System, aby skonfigurować OLLAMA_MAX_LOADED_MODELS.
+        </div>
+      )}
 
       {loading && (
         <div className={viewMode === "grid" ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-3" : "space-y-3"}>

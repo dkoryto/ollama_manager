@@ -12,7 +12,7 @@ export const translations = {
       changelog: "Zmiany",
     },
     home: {
-      ollamaMemoryNote: "Ollama automatycznie zarządza pamięcią. Przy braku RAM/VRAM może wyładować wcześniej załadowane modele, aby załadować nowy.",
+      ollamaMemoryNote: "Ollama automatycznie zarządza pamięcią. Przy braku RAM/VRAM może wyładować wcześniej załadowane modele. Aby wymusić więcej załadowanych modeli, ustaw zmienne środowiskowe Ollamy: OLLAMA_MAX_LOADED_MODELS oraz OLLAMA_NUM_PARALLEL.",
       title: "Modele lokalne",
       subtitle: "Zarządzaj i testuj modele dostępne przez Ollama",
       searchPlaceholder: "Szukaj modelu...",
@@ -134,6 +134,10 @@ export const translations = {
       temperature: "Temperatura CPU",
       memory: "Pamięć RAM",
       memoryAvailable: "dostępne",
+      envVarsTitle: "Zmienne środowiskowe Ollamy",
+      envVarsHint: "Aby Ollama mogła utrzymać więcej niż jeden model w pamięci, ustaw przy uruchamianiu serwera:",
+      envMaxLoaded: "OLLAMA_MAX_LOADED_MODELS – maksymalna liczba modeli trzymanych w pamięci (domyślnie dynamicznie obliczana).",
+      envNumParallel: "OLLAMA_NUM_PARALLEL – maksymalna liczba równoległych zapytań do jednego modelu.",
     },
   },
   en: {
@@ -149,7 +153,7 @@ export const translations = {
       changelog: "Changelog",
     },
     home: {
-      ollamaMemoryNote: "Ollama automatically manages memory. When RAM/VRAM is low it may unload previously loaded models to load a new one.",
+      ollamaMemoryNote: "Ollama automatically manages memory. When RAM/VRAM is low it may unload previously loaded models. To force more loaded models, set Ollama environment variables: OLLAMA_MAX_LOADED_MODELS and OLLAMA_NUM_PARALLEL.",
       title: "Local Models",
       subtitle: "Manage and test models available via Ollama",
       searchPlaceholder: "Search models...",
@@ -271,6 +275,10 @@ export const translations = {
       temperature: "CPU temperature",
       memory: "System memory",
       memoryAvailable: "available",
+      envVarsTitle: "Ollama environment variables",
+      envVarsHint: "To allow Ollama to keep more than one model in memory, set these when starting the server:",
+      envMaxLoaded: "OLLAMA_MAX_LOADED_MODELS – max number of models kept in memory (default is dynamic).",
+      envNumParallel: "OLLAMA_NUM_PARALLEL – max number of parallel requests to a single model.",
     },
   },
 } as const;

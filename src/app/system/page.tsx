@@ -317,7 +317,7 @@ export default function SystemPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="mb-6">
         <CardHeader className="flex flex-row items-center justify-between pb-3">
           <CardTitle className="text-base font-semibold text-[#242424]">{t.system.globalSettings}</CardTitle>
           <Settings2 className="h-4 w-4 text-[#898989]" />
@@ -341,6 +341,25 @@ export default function SystemPage() {
               value={settings.options.system || "—"}
               truncate
             />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-semibold text-[#242424]">{t.system.envVarsTitle}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="mb-3 text-sm text-[#898989]">{t.system.envVarsHint}</p>
+          <div className="space-y-2">
+            <div className="rounded-[8px] border border-[rgba(34,42,53,0.08)] bg-[#fafafa] p-3 text-sm">
+              <code className="font-semibold text-[#242424]">OLLAMA_MAX_LOADED_MODELS=3</code>
+              <p className="mt-1 text-xs text-[#898989]">{t.system.envMaxLoaded}</p>
+            </div>
+            <div className="rounded-[8px] border border-[rgba(34,42,53,0.08)] bg-[#fafafa] p-3 text-sm">
+              <code className="font-semibold text-[#242424]">OLLAMA_NUM_PARALLEL=2</code>
+              <p className="mt-1 text-xs text-[#898989]">{t.system.envNumParallel}</p>
+            </div>
           </div>
         </CardContent>
       </Card>
