@@ -9,7 +9,7 @@ export function Footer() {
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 text-xs text-[#898989]">
         <span>Ollama Manager</span>
         <span>
-          {t.footer.version} 1.0.0
+          {t.footer.version} 1.2.0
         </span>
       </div>
     </footer>
