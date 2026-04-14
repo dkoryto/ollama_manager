@@ -9,8 +9,10 @@ export const translations = {
     appName: "Ollama Manager",
     footer: {
       version: "Wersja",
+      changelog: "Zmiany",
     },
     home: {
+      ollamaMemoryNote: "Ollama automatycznie zarządza pamięcią. Przy braku RAM/VRAM może wyładować wcześniej załadowane modele, aby załadować nowy.",
       title: "Modele lokalne",
       subtitle: "Zarządzaj i testuj modele dostępne przez Ollama",
       searchPlaceholder: "Szukaj modelu...",
@@ -144,8 +146,10 @@ export const translations = {
     appName: "Ollama Manager",
     footer: {
       version: "Version",
+      changelog: "Changelog",
     },
     home: {
+      ollamaMemoryNote: "Ollama automatically manages memory. When RAM/VRAM is low it may unload previously loaded models to load a new one.",
       title: "Local Models",
       subtitle: "Manage and test models available via Ollama",
       searchPlaceholder: "Search models...",

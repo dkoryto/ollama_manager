@@ -226,7 +226,7 @@ export default function Home() {
           model: name,
           prompt: "Say hello",
           stream: false,
-          keep_alive: "5m",
+          keep_alive: -1,
         }),
       });
       if (!res.ok) {
@@ -491,6 +491,10 @@ export default function Home() {
           </Button>
         </div>
       )}
+
+      <div className="mb-4 rounded-[8px] border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+        {t.home.ollamaMemoryNote}
+      </div>
 
       {loading && (
         <div className={viewMode === "grid" ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-3" : "space-y-3"}>

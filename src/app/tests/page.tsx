@@ -319,7 +319,7 @@ export default function TestsPage() {
           model: selectedModel,
           prompt: "Say hello",
           stream: false,
-          keep_alive: "5m",
+          keep_alive: -1,
         }),
       });
       clearInterval(timer);
