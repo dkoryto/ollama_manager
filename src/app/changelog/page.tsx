@@ -15,6 +15,19 @@ export default function ChangelogPage() {
       <div className="mt-8 space-y-4">
         <Card>
           <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold text-[#242424]">v1.2.1</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="list-disc space-y-1 pl-5 text-sm text-[#242424]">
+              <li>Poprawione wyładowywanie modeli – model jest trzymany w pamięci do momentu ręcznego unloadu (keep_alive: -1).</li>
+              <li>Notka informacyjna na stronie głównej wyjaśniająca zarządzanie pamięcią przez Ollamę.</li>
+              <li>Nowa podstrona /changelog z historią zmian, link w stopce.</li>
+            </ul>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
             <CardTitle className="text-base font-semibold text-[#242424]">v1.2.0</CardTitle>
           </CardHeader>
           <CardContent>
@@ -22,11 +35,9 @@ export default function ChangelogPage() {
               <li>Multi-model loading – możliwość załadowania kilku modeli jednocześnie z listy głównej.</li>
               <li>Real loading progress – pasek postępu oparty na faktycznym stanie /api/ps zamiast sztucznego timera.</li>
               <li>Ostrzeżenia RAM/VRAM przed załadowaniem modelu.</li>
-              <li>Poprawione wyładowywanie modeli – model jest trzymany w pamięci do momentu ręcznego unloadu (keep_alive: -1).</li>
               <li>Multi-model chat – wysyłanie tego samego promptu do wielu załadowanych modeli równolegle.</li>
               <li>Monitorowanie temperatury CPU i zużycia RAM na stronie System.</li>
               <li>Rozszerzone okno wyników benchmarków (h-64).</li>
-              <li>Nowa podstrona changelogu w stopce.</li>
             </ul>
           </CardContent>
         </Card>

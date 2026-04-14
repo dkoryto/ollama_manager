@@ -14,7 +14,7 @@ export function Footer() {
             {t.footer.changelog}
           </Link>
           <span>
-            {t.footer.version} 1.2.0
+            {t.footer.version} 1.2.1
           </span>
         </div>
       </div>
